@@ -23,13 +23,23 @@ claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 
 ## 试用期该看什么
 
-**1. 账簿 diff。** 同一段对话,两份账簿应当逐字节相同(除了文件名和标题行)。任何差异都是要修的东西 —— 最可能的来源是下面"必须容忍的偏差"里的前两条。
+**1. 先看 `appendShapes`。** 这是**唯一**一个已知的、需要这次试用才能定下来的设计决定:
 
-**2. `<插件目录>/.tracedoc-mods-status.json`。** 每次记录都会重写,里面是试用真正要看的数据:
+提问白名单目前只有 `prompt`,**没有 `command`** —— 而 exe 版账簿里 `/ai-tracedoc:on` 是被记成一条 Question 的。原因:引擎文档说 `session.append` 的行包括"人的提问、**斜杠命令的记录和它的输出**",而 door 取值里没有任何一个能区分"命令记录"和"命令输出",两者都是 `command`。盲开白名单可能给一条 `/on` 写两条账簿条目,那是污染数据;不开只是少记一条命令行,那是可见的差异。
+
+所以:请在试用时**运行一次 `/ai-tracedoc-mods:on` 或 `/off`**,然后看 `appendShapes` 里 `command | …` 是几行、`doorSamples.command` 是什么。如果是两行而且 `role` / `isMeta` / `origin` 有区别,把区分字段加进白名单即可(代码里那段注释写了确切做法);如果只有一行,直接加。
+
+`queue` **不应该**加进来,永远:它是队列记录,文档明说那是"对话从不保留的行",写进账簿就是记录机器动作而非对话。
+
+**2. 账簿 diff。** 同一段对话,两份账簿应当逐字节相同(除了文件名和标题行)。任何差异都是要修的东西 —— 最可能的来源是"必须容忍的偏差"里的前两条。
+
+**3. `<插件目录>/.tracedoc-mods-status.json`。** 每次记录都会重写,里面是试用真正要看的数据:
 
 | 字段 | 说明 |
 | --- | --- |
-| `appendsByDoor` | **最关键的一项。** 每个 `session.append` 的 `door` 各出现了多少次。目前白名单是 `prompt` + `command`;如果这里出现了别的 door 而且看起来也是人打的字,把它的名字加进 `QUESTION_DOORS` |
+| `appendsByDoor` | 每个 `session.append` 的 `door` 各出现了多少次 |
+| `appendShapes` | 按 `door \| role \| isMeta \| origin` 分组计数。**最关键的一项** |
+| `doorSamples` | 非提问 door 的文本前 60 字。用来判断这个 door 到底装着什么 |
 | `turnReasons` | `answer` / `aborted` / `refusal` / `error` 各多少 |
 | `recorded` | 真正写进账簿的轮数。`recorded` 应当等于 `turns` 减去 `skippedDisabled` |
 | `skippedDisabled` | 因为项目里没有 `.tracedoc-on` 而跳过的轮数 |
@@ -39,7 +49,7 @@ claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 | `hookFailures` | 钩子自身抛错/超时的次数。大于 0 说明 `unreportedFailures` 里有原文 |
 | `aborted` | 被用户打断的轮数 |
 
-**3. 账簿里有没有 `> ⚠ TraceDoc:` 开头的行。** 有就说明某一轮没记上,后面跟着失败位置、时间和原因。这是这个版本对"丢数据"的交代方式 —— 补不回来,但不会瞒着。
+**4. 账簿里有没有 `> ⚠ TraceDoc:` 开头的行。** 有就说明某一轮没记上,后面跟着失败位置、时间和原因。这是这个版本对"丢数据"的交代方式 —— 补不回来,但不会瞒着。
 
 ## 必须容忍的偏差(设计如此,不是 bug)
 
@@ -55,7 +65,7 @@ claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 node test/run.mjs hooks/tracedoc.js
 ```
 
-`test/run.mjs` 用一个假的 `$` 驱动记录器,断言的是**账簿的字节**,不是"没抛异常"。覆盖 19 项:
+`test/run.mjs` 用一个假的 `$` 驱动记录器,断言的是**账簿的字节**,不是"没抛异常"。覆盖 26 项:
 
 - 全新项目第一轮 → 账簿内容逐字节符合 0.3.x 格式(卷头、`## 日期 · 标题`、`<!-- session: -->`、`**Question:** 时间 · 文本`、以及 Go 版那个 parts-then-join 产生的双空行)
 - 同一会话第二轮 → 直接追加,**不**重复写会话标题
@@ -63,6 +73,7 @@ node test/run.mjs hooks/tracedoc.js
 - 新会话到达超过 200 KiB 的卷 → 建 `-02.md`、写 `Continued from`、给旧卷补 `Continued in` 页脚
 - 提问未获回答时 `session.end` → 只记问题,不写 `**Answer:**` 行
 - 某一轮写盘失败 → 不半写;下一轮把 `> ⚠ TraceDoc: a turn went unrecorded — …` 写进账簿,原文包含失败位置和原因
+- `command` / `queue` 的行 → 不进账簿,但计入 `appendShapes` 和 `doorSamples`,`prompt` 的文本不被采样
 
 **没被测到的**,也就是要靠在你的机器上真跑来验的:真实引擎给的 `door` 取值、`agentId` 过滤是否够、热重载、以及 `$.fs` / `$.store` 的真实行为。测试台只能证明逻辑对,证明不了这些。
 

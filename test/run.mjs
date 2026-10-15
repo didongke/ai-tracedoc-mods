@@ -325,6 +325,46 @@ async function testGapIsReported() {
   check('the recorded turn is present', text.indexOf('**Answer:** And is recorded') > 0, true)
 }
 
+async function testUnexaminedDoors() {
+  console.log('\ntest: doors that are not questions are counted, sampled and not recorded')
+  const root = scenario('doors')
+  const $ = makeDollar(root, root.store)
+  const { hooks } = await load('g')
+
+  await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
+  await hooks['session.append']($, {
+    door: 'command',
+    origin: { kind: 'human' },
+    message: { role: 'user', content: [{ type: 'text', text: '/ai-tracedoc-mods:on and its output row' }] },
+  }, async () => undefined)
+  await hooks['session.append']($, {
+    door: 'queue',
+    origin: { kind: 'human' },
+    message: { role: 'user', content: [{ type: 'text', text: '/ai-tracedoc-mods:on and its output row' }] },
+  }, async () => undefined)
+  await hooks['session.append']($, {
+    door: 'prompt',
+    origin: { kind: 'human' },
+    message: { role: 'user', content: [{ type: 'text', text: 'the real question' }] },
+  }, async () => undefined)
+  await hooks['turn.complete']($, { answer: 'the real answer', reason: 'answer' }, async () => undefined)
+
+  const text = readFileSync(join(root.cwd, today() + '-demo-tracedocmod.md'), 'utf8')
+  check('a command row is not in the ledger', text.indexOf('/ai-tracedoc-mods:on'), -1)
+  check('the prompt row is', text.indexOf('the real question') > 0, true)
+
+  const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
+  check('every door counted', JSON.stringify(status.counters.appendsByDoor), '{"command":1,"queue":1,"prompt":1}')
+  check(
+    'shapes recorded',
+    Object.keys(status.counters.appendShapes).sort().join(' ; '),
+    'command | role=user | isMeta=undefined | origin=human ; prompt | role=user | isMeta=undefined | origin=human ; queue | role=user | isMeta=undefined | origin=human',
+  )
+  check('the command row is sampled', status.counters.doorSamples.command, '/ai-tracedoc-mods:on and its output row')
+  check('the queue row is sampled', status.counters.doorSamples.queue, '/ai-tracedoc-mods:on and its output row')
+  check('a prompt is not sampled', status.counters.doorSamples.prompt, undefined)
+}
+
 // ---------------------------------------------------------------------------
 
 await testFirstTurn()
@@ -333,6 +373,7 @@ await testMarkerAbsent()
 await testVolumeRoll()
 await testDeferredQuestion()
 await testGapIsReported()
+await testUnexaminedDoors()
 
 console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all checks passed'))
 process.exit(failures ? 1 : 0)

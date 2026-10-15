@@ -39,15 +39,24 @@ const VERSION = '0.4.0-mods.1'
 // 'tracedoc.md' to make it a drop-in replacement once 0.3.x is uninstalled.
 const SUFFIX = 'tracedocmod.md'
 
-// Which session.append rows are the person speaking. 'prompt' is the engine's
-// stamp for a submitted prompt. 'command' is included because the 0.3.x ledger
-// records a slash command as a question too (`/ai-tracedoc:on` appears in it as
-// one), and both are the person's own gesture. Everything else is dropped
-// rather than matched — in particular the row that repeats the same words with
-// door 'queue' and a second uuid, which is in no documented door set at all.
-// The status file counts every door seen, so the trial can confirm or refute
-// this list instead of trusting it.
-const QUESTION_DOORS = ['prompt', 'command']
+// Which session.append rows are a question. 'prompt' is the engine's stamp for
+// the person's own prompt row, and the only door that is one row for one thing
+// they typed.
+//
+// 'command' is deliberately NOT here yet, although the 0.3.x ledger records a
+// slash command as a question too. The engine's own account of the doors says
+// the rows are "the person's prompt, a slash command's record and output", and
+// no door value separates a command's record from its output — both arrive as
+// 'command'. Naming it blind could therefore write two entries for one `/on`.
+// So the status file records the shape of every door seen (role, isMeta,
+// origin, the first characters of the text) and the trial decides: once the
+// rows are known to be one or two, this list can name 'command' with the field
+// that tells them apart, or a second list can sit beside it.
+//
+// 'queue' is out and should stay out: the docs say a queue record's text passes
+// the event but is "a row the conversation never keeps", so recording it would
+// put a machinery record into a ledger of the conversation.
+const QUESTION_DOORS = ['prompt']
 
 const MARKER = '.tracedoc-on'
 const STATE_KEY = 'tracedoc.state.v1.'
@@ -81,6 +90,8 @@ const counters = {
   subagentTurnsSkipped: 0,
   subagentAppendsSkipped: 0,
   appendsByDoor: {},
+  appendShapes: {},
+  doorSamples: {},
   turnReasons: {},
   endedAs: null,
 }
@@ -550,9 +561,29 @@ export function register(on) {
       }
       const door = e && e.door != null ? String(e.door) : '(absent)'
       counters.appendsByDoor[door] = (counters.appendsByDoor[door] || 0) + 1
-      if (QUESTION_DOORS.indexOf(door) < 0) return out
 
-      const text = messageText(e && e.message)
+      // The shape of every row, so a door's record and its output can be told
+      // apart from evidence rather than from the door alone.
+      const message = e && e.message ? e.message : {}
+      const shape =
+        door +
+        ' | role=' + String(message.role) +
+        ' | isMeta=' + String(message.isMeta) +
+        ' | origin=' + String(e && e.origin ? e.origin.kind : undefined)
+      counters.appendShapes[shape] = (counters.appendShapes[shape] || 0) + 1
+
+      if (QUESTION_DOORS.indexOf(door) < 0) {
+        // Sample only the doors under investigation. A prompt's own text is
+        // already in the ledger by design; these rows are not, and 60
+        // characters is enough to recognise a row without copying it.
+        const text = messageText(message)
+        if (text && !counters.doorSamples[door]) {
+          counters.doorSamples[door] = text.slice(0, 60)
+        }
+        return out
+      }
+
+      const text = messageText(message)
       if (!text) return out
 
       pending = { q: text, t: localStamp(new Date()) }
