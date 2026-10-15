@@ -1,0 +1,4 @@
+{
+  "description": "ai-tracedoc (hooks-module build) - records each project's Q&A into a TraceDoc ledger when .tracedoc-on is present",
+  "modules": ["./tracedoc.js"]
+}

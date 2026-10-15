@@ -1,0 +1,10 @@
+# Line endings are pinned to LF, matching the 0.3.x repository's policy so the
+# two source trees diff cleanly line for line.
+#
+# The machine this was written on has core.autocrlf=true, so without this file
+# a checkout rewrites the working tree to CRLF. Nothing in this build breaks on
+# CRLF -- there are no shell scripts here, which is what CRLF destroys -- but a
+# ledger is an artefact committed alongside code, and its writer always emits
+# LF. A source tree that disagrees with its own output is a diff waiting to
+# happen.
+* text=auto eol=lf

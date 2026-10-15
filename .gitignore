@@ -1,0 +1,10 @@
+# Written next to the module at runtime: diagnostics for a trial run, not
+# source, and it changes on every turn.
+.tracedoc-mods-status.json
+
+# Should not appear inside the plugin directory, but if a session ever runs
+# with this directory as its project, keep the ledger out of the repository.
+*-tracedoc*.md
+.tracedoc-on
+.tracedoc-state.json
+.tracedoc.lock
