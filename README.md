@@ -7,7 +7,8 @@
 ## 安装
 
 ```
-/plugin install ai-tracedoc-mods --marketplace <owner>/<repo>
+/plugin marketplace add didongke/ai-tracedoc-mods
+/plugin install ai-tracedoc-mods@ai-tracedoc-mods
 ```
 
 本地目录(开发用):
@@ -84,6 +85,8 @@ hooks/hooks.json                  声明 modules: ["./tracedoc.js"]
 hooks/tracedoc.js                 记录器本体(唯一的实现文件,也回答 /version)
 commands/{on,off}.md              开、关两个命令
 commands/version.md               声明 /version;正文是模块没加载时的兜底
+tsconfig.json                     编辑器类型检查入口;extends 引擎加载模块时
+                                  写出的 .claude-plugin/types/(只在本机存在)
 test/run.mjs                      格式护栏,不是插件的运行时表面
 ```
 
