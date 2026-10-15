@@ -12,12 +12,21 @@ allowed-tools: Bash(basename "${CLAUDE_PLUGIN_ROOT}")
      sensitive file, because sed counts as write-capable. Splitting the read
      into grep|cut is no better -- a compound command is checked part by part,
      and an injected command never gets to prompt, so a part that would ask
-     aborts the whole invocation. Both forms failed on a real 0.3.3 install on
+     aborts the whole invocation. Both forms failed on a real installed copy on
      2026-10-03. A marketplace install always lands in a directory named after
      its version, and a directory name opens nothing -- which is what makes the
      running directory's name the version of the running copy. Loaded out of a
      working tree it prints that directory's name instead: the one case this is
-     wrong, and one no installed user is in. Do not put the read back. -->
+     wrong, and one no installed user is in. Do not put the read back.
+
+     And put no version number in this comment. Claude Code injects the body
+     below -- this comment included -- into the model's context as a note row
+     (seen in session.append as door `note`, isMeta true, origin `engine`), so
+     a number written here is a number the model can answer with when the
+     substitution comes back empty. One did: on 2026-10-15 a session answered
+     `0.3.3`, the only version-shaped token anywhere in this file, on an
+     install that could only ever print `ai-tracedoc-mods`. The date stays, the
+     rationale stays, the number does not. -->
 
 !`basename "${CLAUDE_PLUGIN_ROOT}"`
 
