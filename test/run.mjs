@@ -20,6 +20,10 @@ if (!MODULE) {
   process.exit(2)
 }
 
+// The manifest beside the module, so the version the module answers with can be
+// held to the one the plugin declares.
+const MANIFEST = join(dirname(MODULE), '..', '.claude-plugin', 'plugin.json')
+
 let failures = 0
 function check(label, actual, expected) {
   if (actual === expected) {
@@ -76,7 +80,13 @@ function makeDollar(root, store) {
         return root.cwd
       },
     },
-    plugin: { root: root.pluginRoot },
+    command: {
+      async register(spec) {
+        root.registered.push(spec)
+        return { command: spec.name }
+      },
+    },
+    plugin: { root: root.pluginRoot, name: root.pluginName },
   }
 }
 
@@ -87,8 +97,16 @@ async function load(tag) {
   const mod = await import(url)
   const hooks = {}
   const catches = {}
-  function on(name, handler) {
+  const matchers = {}
+  // on(event, handler) and on(event, matcher, handler) are both real forms; the
+  // first is `session.start`'s, the second `command.run`'s.
+  function on(name, matcher, handler) {
+    if (typeof matcher === 'function') {
+      handler = matcher
+      matcher = undefined
+    }
     hooks[name] = handler
+    matchers[name] = matcher
     return {
       catch(fn) {
         catches[name] = fn
@@ -97,7 +115,7 @@ async function load(tag) {
     }
   }
   mod.register(on)
-  return { hooks, catches }
+  return { hooks, catches, matchers }
 }
 
 function pad2(n) {
@@ -126,7 +144,7 @@ function scenario(name) {
   mkdirSync(cwd, { recursive: true })
   mkdirSync(pluginRoot, { recursive: true })
   writeFileSync(join(cwd, '.tracedoc-on'), 'ai-tracedoc: recording enabled for this project\n')
-  return { name, cwd, pluginRoot, store: new Map(), sessionId: 'sess-1' }
+  return { name, cwd, pluginRoot, store: new Map(), sessionId: 'sess-1', registered: [], pluginName: 'ai-tracedoc-mods' }
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +402,47 @@ async function testWhichRowsAreQuestions() {
 
 // ---------------------------------------------------------------------------
 
+// The version command is answered by the module's command.run hook rather than
+// by the body of commands/version.md, so the engine prints the string and no
+// model retypes it. What it prints is held to the manifest's version, and to
+// the version the status file reports, so the three cannot drift apart.
+async function testVersionCommand() {
+  console.log('\ntest: the version command')
+  const root = scenario('version')
+  const $ = makeDollar(root, root.store)
+  const { hooks, matchers } = await load('h')
+  const next = async () => undefined
+
+  await hooks['session.start']($, { cwd: root.cwd }, next)
+
+  // The name the engine gives commands/version.md for this plugin. A rename in
+  // plugin.json breaks the match; the harness reads the name from the manifest,
+  // so it says so here rather than in a session.
+  const manifest = JSON.parse(readFileSync(MANIFEST, 'utf8'))
+  const named = manifest.name + ':version'
+  check('a command.run hook narrows on the namespaced name', JSON.stringify(matchers['command.run']), JSON.stringify({ command: named }))
+
+  const answer = await hooks['command.run']($, { command: named, args: '' }, next)
+  check('the answer is the manifest version', answer.text, manifest.version)
+  check('on one line', answer.text.indexOf('\n'), -1)
+  check('answered without next, so no command runs beneath', answer.ref, undefined)
+
+  const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
+  check('the status file reports the same version', status.version, manifest.version)
+
+  // $.command.register would put a second command in the menu: a module's name
+  // is not namespaced the way the engine namespaces commands/version.md, so a
+  // register here would be a bare `/version` beside it. The markdown file
+  // declares the command; the hook answers it.
+  check('and no second command is registered', root.registered.length, 0)
+
+  // The markdown file stays: it declares the name and the description, and its
+  // body is what answers if this module is not loaded.
+  check('version.md is still there to declare the command', existsSync(join(dirname(MODULE), '..', 'commands', 'version.md')), true)
+}
+
+// ---------------------------------------------------------------------------
+
 await testFirstTurn()
 await testSecondTurn()
 await testMarkerAbsent()
@@ -391,6 +450,7 @@ await testVolumeRoll()
 await testDeferredQuestion()
 await testGapIsReported()
 await testWhichRowsAreQuestions()
+await testVersionCommand()
 
 console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all checks passed'))
 process.exit(failures ? 1 : 0)

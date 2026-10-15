@@ -27,6 +27,14 @@ claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 | `/ai-tracedoc-mods:off` | 停止记录(删除 `.tracedoc-on`) |
 | `/ai-tracedoc-mods:version` | 显示版本 |
 
+`version` 由**模块自己回答**(钩子拦下这个命令,返回字符串),所以引擎直接打印、不经过模型:
+
+```
+ai-tracedoc-mods: 0.4.0-mods.1
+```
+
+数字是模块里的常量,和状态文件报的是同一个,也和 `plugin.json` 一致(这条由 `test/run.mjs` 守着)。`commands/version.md` 还在,但它的正文只在模块没加载时才跑 —— 那才是会经过模型的那条路。
+
 然后正常提问。问答会写进项目根目录的账簿:
 
 ```
@@ -73,8 +81,9 @@ node test/run.mjs hooks/tracedoc.js
 .claude-plugin/plugin.json        插件清单
 .claude-plugin/marketplace.json   本地 marketplace 清单
 hooks/hooks.json                  声明 modules: ["./tracedoc.js"]
-hooks/tracedoc.js                 记录器本体(唯一的实现文件)
-commands/{on,off,version}.md      三个命令
+hooks/tracedoc.js                 记录器本体(唯一的实现文件,也回答 /version)
+commands/{on,off}.md              开、关两个命令
+commands/version.md               声明 /version;正文是模块没加载时的兜底
 test/run.mjs                      格式护栏,不是插件的运行时表面
 ```
 

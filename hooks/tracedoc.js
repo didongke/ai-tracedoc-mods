@@ -31,6 +31,14 @@
 // `$`, no event name built by concatenation. Every hook below registers a
 // literal event name and takes `($, e, next)` literally.
 
+// The version this build reports: written into .tracedoc-mods-status.json every
+// turn and printed by /version below. One constant, so what the command answers
+// and what the status file says cannot drift apart.
+//
+// It is a second copy of plugin.json's version, and the one thing that can go
+// wrong with a second copy is that it stops matching. test/run.mjs holds the two
+// together: the harness reads the manifest beside this module and fails if the
+// version this reports is not the one the plugin declares.
 const VERSION = '0.4.0-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
@@ -566,6 +574,26 @@ export function register(on) {
     return out
   }).catch(async ($, e, next) => {
     noteFailure('session.start (hook failed)', next && next.error ? next.error.message : 'unknown')
+    return next(e)
+  })
+
+  // Answers commands/version.md without calling next, so the file's body never
+  // runs and no model retypes the answer: the engine prints this string as the
+  // command's output, under this plugin's name.
+  //
+  // Served from here because the markdown path goes through the model -- the
+  // body is injected into its context and the model repeats what it read --
+  // which is how an install that can only ever be a version-named directory
+  // came to answer `0.3.3` once: the number it found was in the comment.
+  //
+  // The name is the plugin's own, namespaced by the engine as it namespaces
+  // commands/version.md, so the two address one command. Rename the plugin in
+  // plugin.json and this stops matching: the command then falls back to the
+  // body above, which still answers, through the model, the way it did before.
+  on('command.run', { command: 'ai-tracedoc-mods:version' }, async ($, e, next) => {
+    return { text: VERSION }
+  }).catch(async ($, e, next) => {
+    noteFailure('command.run (hook failed)', next && next.error ? next.error.message : 'unknown')
     return next(e)
   })
 
