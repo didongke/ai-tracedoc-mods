@@ -145,7 +145,7 @@ async function testFirstTurn() {
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: '4', reason: 'answer', isAborted: false }, async () => undefined)
 
-  const ledger = join(root.cwd, today() + '-demo-tracedocmod.md')
+  const ledger = join(root.cwd, today() + '-demo-tracedoc.md')
   if (!existsSync(ledger)) {
     failures++
     console.log('  FAIL ledger was not created at ' + ledger)
@@ -181,7 +181,7 @@ async function testSecondTurn() {
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'First answer', reason: 'answer' }, async () => undefined)
 
-  const before = readFileSync(join(root.cwd, today() + '-demo-tracedocmod.md'), 'utf8')
+  const before = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
 
   await hooks['session.append']($, {
     door: 'prompt',
@@ -189,7 +189,7 @@ async function testSecondTurn() {
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'Second answer', reason: 'answer' }, async () => undefined)
 
-  const after = readFileSync(join(root.cwd, today() + '-demo-tracedocmod.md'), 'utf8')
+  const after = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
   const delta = after.slice(before.length).replace(STAMP, 'STAMP')
   check(
     'byte delta of the second turn carries no new session heading',
@@ -229,7 +229,7 @@ async function testVolumeRoll() {
   const $ = makeDollar(root, root.store)
 
   // A volume already past the 200 KiB threshold, written by a previous session.
-  const v1 = join(root.cwd, today() + '-demo-tracedocmod.md')
+  const v1 = join(root.cwd, today() + '-demo-tracedoc.md')
   writeFileSync(v1, HEADER_V1 + '\n## 2026-01-01 · old\n\n<!-- session: older -->\n\n' + 'x'.repeat(210 * 1024) + '\n')
 
   const { hooks } = await load('d')
@@ -240,7 +240,7 @@ async function testVolumeRoll() {
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'In a new volume', reason: 'answer' }, async () => undefined)
 
-  const v2name = today() + '-demo-tracedocmod-02.md'
+  const v2name = today() + '-demo-tracedoc-02.md'
   const v2 = join(root.cwd, v2name)
   if (!existsSync(v2)) {
     failures++
@@ -251,7 +251,7 @@ async function testVolumeRoll() {
   check(
     'volume 2 header',
     v2text.slice(0, v2text.indexOf('\n## ')),
-    '# demo · TraceDoc (Volume 2)\n\nContinued from: [' + today() + '-demo-tracedocmod.md](./' + today() + '-demo-tracedocmod.md)\n\n',
+    '# demo · TraceDoc (Volume 2)\n\nContinued from: [' + today() + '-demo-tracedoc.md](./' + today() + '-demo-tracedoc.md)\n\n',
   )
   const v1text = readFileSync(v1, 'utf8')
   check(
@@ -274,7 +274,7 @@ async function testDeferredQuestion() {
   }, async () => undefined)
   await hooks['session.end']($, { reason: 'exit', sessionId: 'sess-1' }, async () => undefined)
 
-  const text = readFileSync(join(root.cwd, today() + '-demo-tracedocmod.md'), 'utf8').replace(STAMP, 'STAMP')
+  const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8').replace(STAMP, 'STAMP')
   check('question-only entry, no Answer line', text.indexOf('**Answer:**'), -1)
   check('ends question-only', text.endsWith('**Question:** STAMP · Asked but unanswered\n\n'), true)
 }
@@ -313,7 +313,7 @@ async function testGapIsReported() {
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'And is recorded', reason: 'answer' }, async () => undefined)
 
-  const text = readFileSync(join(root.cwd, today() + '-demo-tracedocmod.md'), 'utf8').replace(STAMP, 'STAMP')
+  const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8').replace(STAMP, 'STAMP')
   const gapAt = text.indexOf('> ⚠ TraceDoc: ')
   check('the gap is marked in the ledger', gapAt > 0, true)
   check(
@@ -325,44 +325,61 @@ async function testGapIsReported() {
   check('the recorded turn is present', text.indexOf('**Answer:** And is recorded') > 0, true)
 }
 
-async function testUnexaminedDoors() {
-  console.log('\ntest: doors that are not questions are counted, sampled and not recorded')
+// The shapes below are the ones a real session transcript on this machine
+// holds, which is what the origin rule is derived from.
+async function testWhichRowsAreQuestions() {
+  console.log('\ntest: which rows are questions')
   const root = scenario('doors')
   const $ = makeDollar(root, root.store)
   const { hooks } = await load('g')
+  const row = (door, origin, text) => ({
+    door,
+    origin: origin === undefined ? undefined : { kind: origin },
+    message: { role: 'user', content: [{ type: 'text', text }] },
+  })
+  const send = (r) => hooks['session.append']($, r, async () => undefined)
 
   await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
-  await hooks['session.append']($, {
-    door: 'command',
-    origin: { kind: 'human' },
-    message: { role: 'user', content: [{ type: 'text', text: '/ai-tracedoc-mods:on and its output row' }] },
-  }, async () => undefined)
-  await hooks['session.append']($, {
-    door: 'queue',
-    origin: { kind: 'human' },
-    message: { role: 'user', content: [{ type: 'text', text: '/ai-tracedoc-mods:on and its output row' }] },
-  }, async () => undefined)
-  await hooks['session.append']($, {
-    door: 'prompt',
-    origin: { kind: 'human' },
-    message: { role: 'user', content: [{ type: 'text', text: 'the real question' }] },
-  }, async () => undefined)
-  await hooks['turn.complete']($, { answer: 'the real answer', reason: 'answer' }, async () => undefined)
+  const complete = (answer) => hooks['turn.complete']($, { answer, reason: 'answer' }, async () => undefined)
 
-  const text = readFileSync(join(root.cwd, today() + '-demo-tracedocmod.md'), 'utf8')
-  check('a command row is not in the ledger', text.indexOf('/ai-tracedoc-mods:on'), -1)
-  check('the prompt row is', text.indexOf('the real question') > 0, true)
+  // Turn A: the queue record is written as the prompt is queued, so it comes
+  // first, and the prompt row follows it when the turn starts.
+  await send(row('queue', 'human', 'the real question'))
+  await send(row('prompt', 'human', 'the real question'))
+  await complete('the real answer')
+
+  // Turn B: a slash command is a turn of its own -- its record, then its output.
+  await send(row('command', 'human', '<command-message>ai-tracedoc:on</command-message> <command-name>/ai-tracedoc:on</command-name>'))
+  await send(row('command', undefined, '<local-command-stdout>TraceDoc recording is on</local-command-stdout>'))
+  await complete('Recorded.')
+
+  // A compaction continuation, the caveat around a command, and blocks that are
+  // not the person speaking at all.
+  await send(row('delivery', undefined, 'This session is being continued from a previous conversation'))
+  await send(row('command', undefined, '<local-command-caveat>Caveat: the messages below were generated'))
+  await send(row('response', 'model', 'Here is the answer'))
+  await send(row('tool-result', 'tool', 'file contents'))
+
+  // Status is written on a turn boundary, so the rows above need one to be
+  // counted; session.end writes it too and has no question left to flush.
+  await hooks['session.end']($, { reason: 'exit' }, async () => undefined)
+
+  const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
+  check('the prompt is recorded', text.indexOf('the real question') > 0, true)
+  check('the command record is recorded', text.indexOf('<command-message>ai-tracedoc:on</command-message>') > 0, true)
+  check('the command output is not', text.indexOf('<local-command-stdout>'), -1)
+  check('the caveat is not', text.indexOf('<local-command-caveat>'), -1)
+  check('the continuation is not', text.indexOf('This session is being continued'), -1)
+  check('a response block is not', text.indexOf('Here is the answer'), -1)
+  check('a tool result is not', text.indexOf('file contents'), -1)
+  // Once as a Question, once in the session heading the first question titles.
+  check('one Question line for the prompt', (text.match(/\*\*Question:\*\*[^\n]*the real question/g) || []).length, 1)
+  check('the heading titles the session with it', text.indexOf('· the real question\n') > 0, true)
 
   const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
-  check('every door counted', JSON.stringify(status.counters.appendsByDoor), '{"command":1,"queue":1,"prompt":1}')
-  check(
-    'shapes recorded',
-    Object.keys(status.counters.appendShapes).sort().join(' ; '),
-    'command | role=user | isMeta=undefined | origin=human ; prompt | role=user | isMeta=undefined | origin=human ; queue | role=user | isMeta=undefined | origin=human',
-  )
-  check('the command row is sampled', status.counters.doorSamples.command, '/ai-tracedoc-mods:on and its output row')
-  check('the queue row is sampled', status.counters.doorSamples.queue, '/ai-tracedoc-mods:on and its output row')
-  check('a prompt is not sampled', status.counters.doorSamples.prompt, undefined)
+  check('every row counted', status.counters.rowsNotRecorded, 6)
+  check('the queue row is sampled', status.counters.doorSamples.queue, 'the real question')
+  check('a prompt is never sampled', status.counters.doorSamples.prompt, undefined)
 }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +390,7 @@ await testMarkerAbsent()
 await testVolumeRoll()
 await testDeferredQuestion()
 await testGapIsReported()
-await testUnexaminedDoors()
+await testWhichRowsAreQuestions()
 
 console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all checks passed'))
 process.exit(failures ? 1 : 0)

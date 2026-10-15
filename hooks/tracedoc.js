@@ -33,30 +33,48 @@
 
 const VERSION = '0.4.0-mods.1'
 
-// The ledger's filename suffix. The 0.3.x line owns `tracedoc.md`, and this
-// build is meant to run *beside* it while it is being evaluated, so it writes
-// its own files and neither build can clobber the other's ledger. Set this to
-// 'tracedoc.md' to make it a drop-in replacement once 0.3.x is uninstalled.
-const SUFFIX = 'tracedocmod.md'
+// The ledger's filename suffix: the same one the 0.3.x line writes, so this is
+// a drop-in and a project's ledger keeps its name across the change.
+//
+// That sameness is why the 0.3.x plugin must be disabled rather than left on
+// beside this one. This build read-modify-writes the whole ledger because $.fs
+// has no append, while 0.3.x appended under a lock: two of them on one file
+// means whichever appended inside the other's read-to-write window is erased.
+// One recorder per project, or a suffix of its own -- not both.
+const SUFFIX = 'tracedoc.md'
 
-// Which session.append rows are a question. 'prompt' is the engine's stamp for
-// the person's own prompt row, and the only door that is one row for one thing
-// they typed.
+// Which session.append rows are a question.
 //
-// 'command' is deliberately NOT here yet, although the 0.3.x ledger records a
-// slash command as a question too. The engine's own account of the doors says
-// the rows are "the person's prompt, a slash command's record and output", and
-// no door value separates a command's record from its output — both arrive as
-// 'command'. Naming it blind could therefore write two entries for one `/on`.
-// So the status file records the shape of every door seen (role, isMeta,
-// origin, the first characters of the text) and the trial decides: once the
-// rows are known to be one or two, this list can name 'command' with the field
-// that tells them apart, or a second list can sit beside it.
+// The deciding field is `origin.kind` = 'human', which is the same predicate
+// the 0.3.x build applies to the transcript. A session transcript on this
+// machine, read row by row, separates the rows exactly here:
 //
-// 'queue' is out and should stay out: the docs say a queue record's text passes
-// the event but is "a row the conversation never keeps", so recording it would
-// put a machinery record into a ledger of the conversation.
-const QUESTION_DOORS = ['prompt']
+//   type=user origin=human     content=string   the person's prompt, and a
+//                                               slash command's record
+//   type=user origin=undefined content=string   a command's output
+//                                               (<local-command-stdout>), and
+//                                               the <local-command-caveat>
+//   type=user origin=peer      ...              another session's message
+//   type=user origin=undefined <summary>        a compaction continuation
+//
+// So 'human' takes the person and their commands and leaves the machinery,
+// which is what the 0.3.x ledger holds. `door` is kept as a second way in for
+// the rows origin does not cover: 'prompt' is the person's prompt row by
+// definition, and a 'command' row is the command's record rather than its
+// output when it carries the <command-message> wrapper the record is built
+// from (the output row carries <local-command-stdout> instead). The three
+// tests are alternatives, and a row is one event, so accepting it by more than
+// one of them still records it once.
+//
+// 'queue' is refused by its door, ahead of every other test, and this one is
+// not an alternative. A queued prompt's record carries origin 'human' like the
+// prompt itself, so the origin rule would have taken it; but the docs say a
+// queue record is "a row the conversation never keeps", and the same words
+// arrive again under 'prompt' when the turn starts. Refusing the door means the
+// question is the prompt row whichever order the two arrive in.
+const QUESTION_ORIGIN = 'human'
+const COMMAND_RECORD = '<command-message>'
+const NOT_A_QUESTION_DOORS = ['queue']
 
 const MARKER = '.tracedoc-on'
 const STATE_KEY = 'tracedoc.state.v1.'
@@ -92,6 +110,7 @@ const counters = {
   appendsByDoor: {},
   appendShapes: {},
   doorSamples: {},
+  rowsNotRecorded: 0,
   turnReasons: {},
   endedAs: null,
 }
@@ -516,7 +535,7 @@ async function writeStatus($) {
     session: sessionId || null,
     cwd: sessionCwd || null,
     ledgerSuffix: SUFFIX,
-    questionDoors: QUESTION_DOORS,
+    questionRule: { origin: QUESTION_ORIGIN, door: 'prompt', commandRecord: COMMAND_RECORD },
     counters: counters,
     pending: pending ? pending.q.slice(0, 120) : null,
     unreportedFailures: failures,
@@ -562,29 +581,36 @@ export function register(on) {
       const door = e && e.door != null ? String(e.door) : '(absent)'
       counters.appendsByDoor[door] = (counters.appendsByDoor[door] || 0) + 1
 
-      // The shape of every row, so a door's record and its output can be told
-      // apart from evidence rather than from the door alone.
       const message = e && e.message ? e.message : {}
+      const origin = e && e.origin && e.origin.kind != null ? String(e.origin.kind) : '(absent)'
+
+      // The shape of every row, kept because which doors and origins this
+      // engine really sends is not something to take on faith.
       const shape =
         door +
         ' | role=' + String(message.role) +
         ' | isMeta=' + String(message.isMeta) +
-        ' | origin=' + String(e && e.origin ? e.origin.kind : undefined)
+        ' | origin=' + origin
       counters.appendShapes[shape] = (counters.appendShapes[shape] || 0) + 1
 
-      if (QUESTION_DOORS.indexOf(door) < 0) {
-        // Sample only the doors under investigation. A prompt's own text is
-        // already in the ledger by design; these rows are not, and 60
-        // characters is enough to recognise a row without copying it.
-        const text = messageText(message)
-        if (text && !counters.doorSamples[door]) {
+      const text = messageText(message)
+      const isQuestion =
+        NOT_A_QUESTION_DOORS.indexOf(door) < 0 &&
+        (origin === QUESTION_ORIGIN ||
+          door === 'prompt' ||
+          (door === 'command' && text.indexOf(COMMAND_RECORD) >= 0))
+
+      if (!isQuestion || !text) {
+        // A row that is not recorded is sampled, so one that should have been
+        // can be recognised from the status file. Never a prompt's: its text is
+        // in the ledger by design, and a second copy of it is exposure with
+        // nothing bought.
+        if (text && door !== 'prompt' && !counters.doorSamples[door]) {
           counters.doorSamples[door] = text.slice(0, 60)
         }
+        counters.rowsNotRecorded++
         return out
       }
-
-      const text = messageText(message)
-      if (!text) return out
 
       pending = { q: text, t: localStamp(new Date()) }
       await savePending($, pending)
