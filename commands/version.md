@@ -24,9 +24,10 @@ allowed-tools: Bash(basename "${CLAUDE_PLUGIN_ROOT}")
      (seen in session.append as door `note`, isMeta true, origin `engine`), so
      a number written here is a number the model can answer with when the
      substitution comes back empty. One did: on 2026-10-15 a session answered
-     `0.3.3`, the only version-shaped token anywhere in this file, on an
-     install that could only ever print `ai-tracedoc-mods`. The date stays, the
-     rationale stays, the number does not. -->
+     with this plugin's previous release number -- the only version-shaped
+     token anywhere in this file -- on an install that could only ever print
+     `ai-tracedoc-mods`. The date stays, the rationale stays, the number does
+     not. -->
 
 !`basename "${CLAUDE_PLUGIN_ROOT}"`
 
