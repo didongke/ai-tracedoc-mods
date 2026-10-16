@@ -6,10 +6,14 @@
 
 ## 安装
 
+**需要 Claude Code ≥ 2.1.287**(终端;Desktop app 是 2.1.286,它自带一份 Claude Code)。钩子模块是 2.1.287 起的机制,更低的版本引擎不会加载这个模块 —— 插件装了也不记录。查版本:`claude --version`。升不上去的机器只能用 0.3.x(exe 版)。
+
 ```
 /plugin marketplace add didongke/ai-tracedoc-mods
 /plugin install ai-tracedoc-mods@ai-tracedoc-mods
 ```
+
+装完打开 `/plugin`,标签页下面那行灰字应该写着 `1 mod active · ai-tracedoc-mods`。没有这行就是模块没加载,这时 `/version` 走的是 `commands/version.md` 那条兜底路。
 
 本地目录(开发用):
 
