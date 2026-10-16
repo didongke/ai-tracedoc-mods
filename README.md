@@ -37,7 +37,7 @@ claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 `version` 由**模块自己回答**(钩子拦下这个命令,返回字符串),所以引擎直接打印、不经过模型:
 
 ```
-ai-tracedoc-mods: 0.5.1-mods.1
+ai-tracedoc-mods: 0.5.2-mods.1
 ```
 
 数字是模块里的常量,和状态文件报的是同一个,也和 `plugin.json` 一致(这条由 `test/run.mjs` 守着)。`commands/version.md` 还在,但它的正文只在模块没加载时才跑 —— 那才是会经过模型的那条路。
@@ -77,11 +77,18 @@ ai-tracedoc-mods: 0.5.1-mods.1
 - **只写答完的问答。** 没等到答案的提问、没记上的轮次,都不在里面,只在账簿里
 - 中文原样写(不转成 `\uXXXX`),换行和引号按 JSON 规则转义,所以一条再长也始终是一行
 - **没有表头行**,`jq` 读整个文件不用跳过第一行。所以从 0.3.x 接手一个老项目时,这个文件从**本版本记下的第一条**开始,旧历史不在里面 —— 和"没有补记"是同一条原则
+- 卷多了以后别用 `cat *-tracedoc.jsonl` 拼:文件名按字节序排,`-02.jsonl` 里那个 `-` 排在基础卷的 `.` 前面,拼出来第二卷反倒在前。要按时间读就把文件显式列出来
 
 按条件过滤,比如挑出提到 SAC 的那些问题的时间:
 
 ```
 jq -r 'select(.question | test("SAC")) | [.time, (.question | split("\n")[0])] | @tsv' *-tracedoc.jsonl
+```
+
+`jq` 不是随系统来的(本机就没装),没装也能读,node 就行,和上面那条等价:
+
+```
+node -e 'const fs=require("fs");for(const f of process.argv.slice(1))fs.readFileSync(f,"utf8").split("\n").filter(Boolean).map(JSON.parse).filter(o=>/SAC/.test(o.question)).forEach(o=>console.log(o.time+"\t"+o.question.split("\n")[0]))' *-tracedoc.jsonl
 ```
 
 ## 维护状态
@@ -93,6 +100,8 @@ jq -r 'select(.question | test("SAC")) | [.time, (.question | split("\n")[0])] |
 ## 和 0.3.x(exe 版)的区别
 
 **不要两个一起开。** 两者写的是同一个文件名,而这个版本因为没有 append 只能整份读-改-写,0.3.x 是在锁里 append —— 两个同时写,在对方读和写之间落下的那条会被抹掉。装了这个就把 0.3.x 停掉(`claude plugin disable ai-tracedoc`),反之亦然。想两个都留着对比的话,把 `hooks/tracedoc.js` 里的 `SUFFIX` 改成别的名字。
+
+交接的那一刻账簿里会多出一个 `## 标题`:两边各存各的会话状态(0.3.x 用项目里的 `.tracedoc-state.json`,这个版本用引擎的 store),换了 build 之后的第一次记录会被当成新会话。本机 2026-10-15 换的时候就是这样,账簿里多出来的那一个标题是它,条目一条没丢。同一版本换个加载身份(装进插件目录 vs `--plugin-dir` 指同一份代码)也一样,状态不通用。
 
 **条目的排版也不再一样了。** 文件名、卷号、卷头、会话标题全都相同;不同的是一条记录怎么排:
 
@@ -122,10 +131,13 @@ jq -r 'select(.question | test("SAC")) | [.time, (.question | split("\n")[0])] |
 
 判据是 `origin.kind`,也就是**这一行是谁写的**:人写的报 `composer`(transcript 里报 `human`,两种都收)。**光看 door 不够** —— 引擎自己也往 `prompt` 这扇门里塞消息,只在 `origin` 里报自己是谁;早先只看 door,结果把一条后台任务完成通知(`<task-notification>`,带着 task id)记成了一次提问。现在 origin 不认识的行一律不收。斜杠命令的**记录行**是唯一的例外,靠它带的 `<command-message>` 认;它的**输出行**带 `<local-command-stdout>`,不收。这些都是从本机逐行核出来的行形状,不是猜的。
 
+一轮只留一条提问。`pending` 只有一个槽,同一轮里后到的顶掉先到的 —— 所以先敲命令、紧接着写正文提问时,进账簿的是正文那条,命令的记录行不进。整轮就是命令的(比如单独一次 `/on`),它连着自己的回答一起记下,不受这条影响。
+
 ## 诊断
 
 插件目录下有个 `.tracedoc-mods-status.json`,每轮重写。它是给"怎么没记上"用的,平时不用看:
 
+- `updatedAt` / `session` / `volume` —— 这份文件是哪个会话、哪个实例、写进哪一卷的时候写下的。配上 `version`,"刚改完代码,现在跑的是不是新的那份"不用再去翻文件时间。`volume` 在这个实例还没记过东西时是 `null`
 - `recorded` / `turns` / `skippedDisabled` —— 记了几轮 / 发生了几轮 / 因为项目没开记录跳过几轮
 - `jsonlRows` / `jsonlFailures` —— 写了几行 JSONL / 失败几次。`recorded` 比 `jsonlRows` 大是正常的(没答的提问只在账簿里);`jsonlFailures` 大于 0 就是那一轮**只进了账簿**,`jsonlErrors` 有原文
 - `orphanAnswers` —— **大于 0 就是真丢了东西**
@@ -140,7 +152,7 @@ JSONL 写失败**不会**在账簿里留 ⚠ 行。那行的意思是"这一轮�
 node test/run.mjs hooks/tracedoc.js
 ```
 
-用假的 `$` 驱动记录器,断言**账簿的字节**:卷头、会话标题、标签独占一行而正文从下一行开始、同会话追加不重写标题、200 KiB 滚卷、未答提问的收尾、写盘失败时的缺口行、以及哪些 `session.append` 行算提问。JSONL 那边断言每一行:三个字段的顺序与内容、时间取的是提问那一刻、中文不被转义成 `\uXXXX`、回答里的换行不把一行拆成两行、未答的提问和丢掉的轮次都不写行、滚卷时不给旧卷补造 JSONL。需要 Node,无依赖。
+用假的 `$` 驱动记录器,断言**账簿的字节**:卷头、会话标题、标签独占一行而正文从下一行开始、同会话追加不重写标题、200 KiB 滚卷、未答提问的收尾、写盘失败时的缺口行、以及哪些 `session.append` 行算提问。JSONL 那边断言每一行:三个字段的顺序与内容、时间取的是提问那一刻、中文不被转义成 `\uXXXX`、回答里的换行不把一行拆成两行、未答的提问和丢掉的轮次都不写行、滚卷时不给旧卷补造 JSONL。状态文件那边断言它报的版本、卷号和计数。需要 Node,无依赖。
 
 ## 文件
 

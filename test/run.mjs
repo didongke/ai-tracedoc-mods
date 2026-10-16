@@ -198,6 +198,9 @@ async function testFirstTurn() {
   check('counters.turns', status.counters.turns, 1)
   check('counters.orphanAnswers', status.counters.orphanAnswers, 0)
   check('doors seen', JSON.stringify(status.counters.appendsByDoor), '{"prompt":1}')
+  // The volume the status file names is the one this instance wrote, so a
+  // running build can be identified without reading file mtimes.
+  check('the volume this instance wrote', status.volume, today() + '-demo-tracedoc.md')
 }
 
 async function testSecondTurn() {

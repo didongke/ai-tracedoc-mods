@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.1-mods.1'
+const VERSION = '0.5.2-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -131,6 +131,10 @@ let sessionId = ''
 let pending = null
 let failures = []
 let jsonlErrors = []
+// The ledger file this instance last wrote, so the status file can name the
+// volume that is live. "Is the build I just edited the one running?" is
+// otherwise answerable only from file mtimes and the store's write history.
+let statusVolume = ''
 
 const counters = {
   turns: 0,
@@ -595,6 +599,7 @@ async function record($, question, answer) {
   // life, so its entries stay contiguous and it never spans volumes.
   if (placed && (await statOf($, join(cwd, placed)))) {
     await appendText($, join(cwd, placed), takeGaps() + formatEntries([entry]))
+    statusVolume = placed
     counters.recorded++
     await appendJsonl($, cwd, placed, entry, at)
     await $.store.set(stateKey(cwd), state)
@@ -631,6 +636,7 @@ async function record($, question, answer) {
 
   trackSession(state, id, current)
   state.volume = current
+  statusVolume = current
   await $.store.set(stateKey(cwd), state)
 }
 
@@ -665,6 +671,7 @@ async function writeStatus($) {
     version: VERSION,
     updatedAt: localStamp(new Date()),
     session: sessionId || null,
+    volume: statusVolume || null,
     cwd: sessionCwd || null,
     ledgerSuffix: SUFFIX,
     jsonlSuffix: JSONL_SUFFIX,
