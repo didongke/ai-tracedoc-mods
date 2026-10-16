@@ -159,6 +159,7 @@ async function testFirstTurn() {
   await hooks['session.append']($, {
     agentId: null,
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'What is 2+2?' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: '4', reason: 'answer', isAborted: false }, async () => undefined)
@@ -208,6 +209,7 @@ async function testSecondTurn() {
   await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'First question' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'First answer', reason: 'answer' }, async () => undefined)
@@ -219,6 +221,7 @@ async function testSecondTurn() {
   // text carelessly or writes it as it comes.
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: '第二个问题' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: '第二行前\n"带引号"', reason: 'answer' }, async () => undefined)
@@ -256,6 +259,7 @@ async function testMarkerAbsent() {
   await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'Should not be recorded' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'Nor this', reason: 'answer' }, async () => undefined)
@@ -280,6 +284,7 @@ async function testVolumeRoll() {
   await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'A new session begins' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'In a new volume', reason: 'answer' }, async () => undefined)
@@ -321,6 +326,7 @@ async function testDeferredQuestion() {
   await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'Asked but unanswered' }] },
   }, async () => undefined)
   await hooks['session.end']($, { reason: 'exit', sessionId: 'sess-1' }, async () => undefined)
@@ -358,6 +364,7 @@ async function testGapIsReported() {
   await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'This turn will not land' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'Lost answer', reason: 'answer' }, async () => undefined)
@@ -367,6 +374,7 @@ async function testGapIsReported() {
 
   await hooks['session.append']($, {
     door: 'prompt',
+    origin: { kind: 'composer' },
     message: { content: [{ type: 'text', text: 'This one lands' }] },
   }, async () => undefined)
   await hooks['turn.complete']($, { answer: 'And is recorded', reason: 'answer' }, async () => undefined)
@@ -391,8 +399,9 @@ async function testGapIsReported() {
   check('and it is the one that landed', lines[0].indexOf('"question":"This one lands"') > 0, true)
 }
 
-// The shapes below are the ones a real session transcript on this machine
-// holds, which is what the origin rule is derived from.
+// The shapes below are the ones a real session on this machine holds, which is
+// what the origin rule is derived from — including the row that proved the rule
+// wrong the first time: a finished background task arriving as a prompt.
 async function testWhichRowsAreQuestions() {
   console.log('\ntest: which rows are questions')
   const root = scenario('doors')
@@ -419,6 +428,12 @@ async function testWhichRowsAreQuestions() {
   await send(row('command', undefined, '<local-command-stdout>TraceDoc recording is on</local-command-stdout>'))
   await complete('Recorded.')
 
+  // Turn C: the live spelling of the person's origin. The engine says
+  // 'composer' where a transcript says 'human', so a rule that took only one of
+  // the two would record nothing at all on the other.
+  await send(row('prompt', 'composer', 'a composer prompt'))
+  await complete('Taken too.')
+
   // A compaction continuation, the caveat around a command, and blocks that are
   // not the person speaking at all.
   await send(row('delivery', undefined, 'This session is being continued from a previous conversation'))
@@ -426,18 +441,25 @@ async function testWhichRowsAreQuestions() {
   await send(row('response', 'model', 'Here is the answer'))
   await send(row('tool-result', 'tool', 'file contents'))
 
+  // An engine-injected prompt: a finished background task comes down the
+  // person's own door and names who wrote it in `origin` alone. Taking the door
+  // by itself recorded this as a question somebody had asked.
+  await send(row('prompt', 'task-notification', '<task-notification>a background command finished</task-notification>'))
+
   // Status is written on a turn boundary, so the rows above need one to be
   // counted; session.end writes it too and has no question left to flush.
   await hooks['session.end']($, { reason: 'exit' }, async () => undefined)
 
   const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
   check('the prompt is recorded', text.indexOf('the real question') > 0, true)
+  check('the live spelling of the person is recorded too', text.indexOf('a composer prompt') > 0, true)
   check('the command record is recorded', text.indexOf('<command-message>ai-tracedoc:on</command-message>') > 0, true)
   check('the command output is not', text.indexOf('<local-command-stdout>'), -1)
   check('the caveat is not', text.indexOf('<local-command-caveat>'), -1)
   check('the continuation is not', text.indexOf('This session is being continued'), -1)
   check('a response block is not', text.indexOf('Here is the answer'), -1)
   check('a tool result is not', text.indexOf('file contents'), -1)
+  check('an engine-injected prompt is not', text.indexOf('<task-notification>'), -1)
   // Once as a Question, once in the session heading the first question titles.
   check('one Question line for the prompt', (text.match(/\*\*Question:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}\nthe real question/g) || []).length, 1)
   check('the heading titles the session with it', text.indexOf('· the real question\n') > 0, true)
@@ -453,7 +475,7 @@ async function testWhichRowsAreQuestions() {
   }), true)
 
   const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
-  check('every row counted', status.counters.rowsNotRecorded, 6)
+  check('every row counted', status.counters.rowsNotRecorded, 7)
   check('the queue row is sampled', status.counters.doorSamples.queue, 'the real question')
   check('a prompt is never sampled', status.counters.doorSamples.prompt, undefined)
 }

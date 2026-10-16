@@ -19,8 +19,10 @@
 //     That serialises the hooks of one session. Two Claude Code sessions in
 //     the same project would still overwrite each other, where the 0.3.x build
 //     took a real lock and appended.
-//   * The question is the engine's own stamp now: session.append with door
-//     'prompt'. The 0.3.x build had to infer it from the transcript.
+//   * The question is the engine's own stamp now: a session.append row whose
+//     `origin.kind` names the person, where the 0.3.x build had to infer it
+//     from the transcript. The door is not that stamp — the engine injects
+//     rows down 'prompt' as well (see the rule further down).
 //   * There is no ai-title record here, so a session heading is titled from
 //     its first question — the same fallback the 0.3.x build used when no
 //     title record was present.
@@ -39,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.0-mods.1'
+const VERSION = '0.5.1-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -65,34 +67,46 @@ const JSONL_SUFFIX = 'tracedoc.jsonl'
 
 // Which session.append rows are a question.
 //
-// The deciding field is `origin.kind` = 'human', which is the same predicate
-// the 0.3.x build applies to the transcript. A session transcript on this
-// machine, read row by row, separates the rows exactly here:
+// The deciding field is `origin.kind`, which says who wrote the row. A live
+// session on this machine, read row by row, separates them exactly here:
 //
-//   type=user origin=human     content=string   the person's prompt, and a
-//                                               slash command's record
-//   type=user origin=undefined content=string   a command's output
-//                                               (<local-command-stdout>), and
-//                                               the <local-command-caveat>
-//   type=user origin=peer      ...              another session's message
-//   type=user origin=undefined <summary>        a compaction continuation
+//   prompt | origin=composer            the person's prompt
+//   prompt | origin=task-notification   a finished background task, delivered
+//                                       down the person's own door
+//   command | origin=engine             a slash command's record (carries
+//                                       <command-message>) or its output
+//                                       (carries <local-command-stdout>)
+//   response | origin=model             the AI's answer
+//   tool-result | origin=tool           a tool's output
+//   attachment, notice, note | origin=engine
 //
-// So 'human' takes the person and their commands and leaves the machinery,
-// which is what the 0.3.x ledger holds. `door` is kept as a second way in for
-// the rows origin does not cover: 'prompt' is the person's prompt row by
-// definition, and a 'command' row is the command's record rather than its
-// output when it carries the <command-message> wrapper the record is built
-// from (the output row carries <local-command-stdout> instead). The three
-// tests are alternatives, and a row is one event, so accepting it by more than
-// one of them still records it once.
+// A transcript separates the same rows on the same field, spelling the person
+// 'human' where the live engine says 'composer'. Both are taken, so this stays
+// the predicate the 0.3.x build applies to a transcript.
 //
-// 'queue' is refused by its door, ahead of every other test, and this one is
-// not an alternative. A queued prompt's record carries origin 'human' like the
+// The door is not a substitute for it. 'prompt' reads like "the person's
+// prompt" and is not: the engine injects its own messages down that door, and
+// they name themselves in `origin` alone. Taking the door by itself recorded a
+// finished background task as a question somebody had asked — a
+// <task-notification> wrapper, task id and all, paired with the answer to it.
+// That is what the origin test refuses. An origin this does not recognise is
+// refused too, rather than taken: the rule is "a person wrote this", not "this
+// does not look like machinery". The status file's appendShapes counts every
+// row's origin, so a spelling the engine changes shows up there as a prompt
+// row whose origin is new while `turns` stays put.
+//
+// The command record is the one row taken by something other than its origin:
+// the engine writes it, and what it is the record of is the person's command,
+// so it is recognised by the wrapper its record is built from. A 'command' row
+// without that wrapper is the command's output.
+//
+// 'queue' is refused by its door, ahead of every other test, and it is not an
+// alternative. A queued prompt's record carries the person's origin like the
 // prompt itself, so the origin rule would have taken it; but the docs say a
 // queue record is "a row the conversation never keeps", and the same words
 // arrive again under 'prompt' when the turn starts. Refusing the door means the
 // question is the prompt row whichever order the two arrive in.
-const QUESTION_ORIGIN = 'human'
+const QUESTION_ORIGINS = ['human', 'composer']
 const COMMAND_RECORD = '<command-message>'
 const NOT_A_QUESTION_DOORS = ['queue']
 
@@ -654,7 +668,7 @@ async function writeStatus($) {
     cwd: sessionCwd || null,
     ledgerSuffix: SUFFIX,
     jsonlSuffix: JSONL_SUFFIX,
-    questionRule: { origin: QUESTION_ORIGIN, door: 'prompt', commandRecord: COMMAND_RECORD },
+    questionRule: { origin: QUESTION_ORIGINS, commandRecord: COMMAND_RECORD },
     counters: counters,
     pending: pending ? pending.q.slice(0, 120) : null,
     unreportedFailures: failures,
@@ -736,8 +750,7 @@ export function register(on) {
       const text = messageText(message)
       const isQuestion =
         NOT_A_QUESTION_DOORS.indexOf(door) < 0 &&
-        (origin === QUESTION_ORIGIN ||
-          door === 'prompt' ||
+        (QUESTION_ORIGINS.indexOf(origin) >= 0 ||
           (door === 'command' && text.indexOf(COMMAND_RECORD) >= 0))
 
       if (!isQuestion || !text) {
