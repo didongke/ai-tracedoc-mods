@@ -427,8 +427,12 @@ async function testWhichRowsAreQuestions() {
   await complete('the real answer')
 
   // Turn B: a slash command is a turn of its own -- its record, then its output.
-  await send(row('command', 'human', '<command-message>ai-tracedoc:on</command-message> <command-name>/ai-tracedoc:on</command-name>'))
-  await send(row('command', undefined, '<local-command-stdout>TraceDoc recording is on</local-command-stdout>'))
+  // Both rows say origin=engine on the live engine (the status file's
+  // appendShapes carries it: 'command | role=user | origin=engine' x2), which a
+  // pure origin allowlist refuses; the <command-message> wrapper is left only to
+  // name the turn, so this turn is not mistaken for a question that went missing.
+  await send(row('command', 'engine', '<command-message>ai-tracedoc:on</command-message> <command-name>/ai-tracedoc:on</command-name>'))
+  await send(row('command', 'engine', '<local-command-stdout>TraceDoc recording is on</local-command-stdout>'))
   await complete('Recorded.')
 
   // Turn C: the live spelling of the person's origin. The engine says
@@ -456,7 +460,7 @@ async function testWhichRowsAreQuestions() {
   const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
   check('the prompt is recorded', text.indexOf('the real question') > 0, true)
   check('the live spelling of the person is recorded too', text.indexOf('a composer prompt') > 0, true)
-  check('the command record is recorded', text.indexOf('<command-message>ai-tracedoc:on</command-message>') > 0, true)
+  check('the command record is not', text.indexOf('<command-message>ai-tracedoc:on</command-message>'), -1)
   check('the command output is not', text.indexOf('<local-command-stdout>'), -1)
   check('the caveat is not', text.indexOf('<local-command-caveat>'), -1)
   check('the continuation is not', text.indexOf('This session is being continued'), -1)
@@ -478,7 +482,11 @@ async function testWhichRowsAreQuestions() {
   }), true)
 
   const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
-  check('every row counted', status.counters.rowsNotRecorded, 7)
+  check('every row counted', status.counters.rowsNotRecorded, 8)
+  // The command turn recorded nothing, and that is not a lost turn: the two are
+  // counted apart, and only the second is bad news.
+  check('the command turn is counted as one', status.counters.commandTurnsSkipped, 1)
+  check('a command turn is not a missing question', status.counters.orphanAnswers, 0)
   check('the queue row is sampled', status.counters.doorSamples.queue, 'the real question')
   check('a prompt is never sampled', status.counters.doorSamples.prompt, undefined)
 }

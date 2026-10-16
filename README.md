@@ -52,7 +52,7 @@ claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 `version` 由**模块自己回答**(钩子拦下这个命令,返回字符串),所以引擎直接打印、不经过模型:
 
 ```
-ai-tracedoc-mods: 0.5.2-mods.1
+ai-tracedoc-mods: 0.5.3-mods.1
 ```
 
 数字是模块里的常量,和状态文件报的是同一个,也和 `plugin.json` 一致(这条由 `test/run.mjs` 守着)。`commands/version.md` 还在,但它的正文只在模块没加载时才跑 —— 那才是会经过模型的那条路。
@@ -143,10 +143,11 @@ node -e 'const fs=require("fs");for(const f of process.argv.slice(1))fs.readFile
 2. **同一项目两个会话会互相覆盖。** 没有锁,只有模块内一条 promise 链,串起的是**单个会话**的钩子。exe 版有真锁,最坏是重复记录 而不是覆盖。
 3. **会话标题退化成首问**(压平到一行、截 40 字)。没有 `ai-title` 事件的等价物 —— 也就是 exe 版没有标题记录时用的那个兜底。
 4. **提问时间是钩子运行时刻**,不是提问时刻;差毫秒级。
+5. **斜杠命令的记录进不进账簿,两边不一样。** 0.3.x 读的是 transcript,那里命令的记录行带的是**人的** origin,于是被当成一次提问记下;这个版本看到的是实时行,它报 `origin=engine`,不收。同一个项目换过 build 的话,账簿里早先那些 `/on`、`/exit` 会留着 —— 已经写下的字节不动,只往后不再写新的。
 
-判据是 `origin.kind`,也就是**这一行是谁写的**:人写的报 `composer`(transcript 里报 `human`,两种都收)。**光看 door 不够** —— 引擎自己也往 `prompt` 这扇门里塞消息,只在 `origin` 里报自己是谁;早先只看 door,结果把一条后台任务完成通知(`<task-notification>`,带着 task id)记成了一次提问。现在 origin 不认识的行一律不收。斜杠命令的**记录行**是唯一的例外,靠它带的 `<command-message>` 认;它的**输出行**带 `<local-command-stdout>`,不收。这些都是从本机逐行核出来的行形状,不是猜的。
+判据是 `origin.kind`,也就是**这一行是谁写的**:人写的报 `composer`(transcript 里报 `human`,两种都收)。**光看 door 不够** —— 引擎自己也往 `prompt` 这扇门里塞消息,只在 `origin` 里报自己是谁;早先只看 door,结果把一条后台任务完成通知(`<task-notification>`,带着 task id)记成了一次提问。现在 origin 不认识的行一律不收,**没有例外**:斜杠命令的记录行和输出行在本机都是 `origin=engine`,所以命令本身不进账簿。代码里仍然认 `<command-message>` 那个标记,但只用它判断"这一轮是命令轮",不是拿它收行 —— 一条被收下的问题必须靠 origin,不靠长什么样。这些都是从本机逐行核出来的行形状,不是猜的。
 
-一轮只留一条提问。`pending` 只有一个槽,同一轮里后到的顶掉先到的 —— 所以先敲命令、紧接着写正文提问时,进账簿的是正文那条,命令的记录行不进。整轮就是命令的(比如单独一次 `/on`),它连着自己的回答一起记下,不受这条影响。
+一轮只留一条提问。`pending` 只有一个槽,同一轮里后到的顶掉先到的 —— 所以先敲命令、紧接着写正文提问时,进账簿的是正文那条。整轮就是命令的(单独一次 `/on`、一次 `/version`),这一轮从头到尾没有提问,也就不进账簿;它记在状态文件的 `commandTurnsSkipped` 里,和"提问丢了"(`orphanAnswers`)分开数。
 
 ## 诊断
 
@@ -155,6 +156,7 @@ node -e 'const fs=require("fs");for(const f of process.argv.slice(1))fs.readFile
 - `updatedAt` / `session` / `volume` —— 这份文件是哪个会话、哪个实例、写进哪一卷的时候写下的。配上 `version`,"刚改完代码,现在跑的是不是新的那份"不用再去翻文件时间。`volume` 在这个实例还没记过东西时是 `null`
 - `recorded` / `turns` / `skippedDisabled` —— 记了几轮 / 发生了几轮 / 因为项目没开记录跳过几轮
 - `jsonlRows` / `jsonlFailures` —— 写了几行 JSONL / 失败几次。`recorded` 比 `jsonlRows` 大是正常的(没答的提问只在账簿里);`jsonlFailures` 大于 0 就是那一轮**只进了账簿**,`jsonlErrors` 有原文
+- `commandTurnsSkipped` —— 整轮是斜杠命令、本来就没有东西可记的轮数(单独一次 `/on`、一次 `/version`)。它涨是正常的,和下一项分开数,就是为了让"没东西可记"不冒充"丢了东西"
 - `orphanAnswers` —— **大于 0 就是真丢了东西**
 - `rowsNotRecorded` 和 `appendShapes` —— 每一条 `session.append` 行的形状计数,用来核对判据。人写的 prompt 是 `origin=composer`;哪天冒出 `prompt | … | origin=<别的>` 在涨、而 `turns` 不涨,就是引擎换叫法了,判据得跟着改 —— 不收认不出的 origin 换来了"只记人写的",代价是这种情形会**静默地不记录**,这一项就是用来发现它的
 - `hookFailures` 和 `unreportedFailures` —— 钩子自己出错时的原文
@@ -167,7 +169,7 @@ JSONL 写失败**不会**在账簿里留 ⚠ 行。那行的意思是"这一轮�
 node test/run.mjs hooks/tracedoc.js
 ```
 
-用假的 `$` 驱动记录器,断言**账簿的字节**:卷头、会话标题、标签独占一行而正文从下一行开始、同会话追加不重写标题、200 KiB 滚卷、未答提问的收尾、写盘失败时的缺口行、以及哪些 `session.append` 行算提问。JSONL 那边断言每一行:三个字段的顺序与内容、时间取的是提问那一刻、中文不被转义成 `\uXXXX`、回答里的换行不把一行拆成两行、未答的提问和丢掉的轮次都不写行、滚卷时不给旧卷补造 JSONL。状态文件那边断言它报的版本、卷号和计数。需要 Node,无依赖。
+用假的 `$` 驱动记录器,断言**账簿的字节**:卷头、会话标题、标签独占一行而正文从下一行开始、同会话追加不重写标题、200 KiB 滚卷、未答提问的收尾、写盘失败时的缺口行、以及哪些 `session.append` 行算提问(命令轮在里面:它不进账簿,也不算丢提问)。JSONL 那边断言每一行:三个字段的顺序与内容、时间取的是提问那一刻、中文不被转义成 `\uXXXX`、回答里的换行不把一行拆成两行、未答的提问和丢掉的轮次都不写行、滚卷时不给旧卷补造 JSONL。状态文件那边断言它报的版本、卷号和计数。需要 Node,无依赖。
 
 ## 文件
 

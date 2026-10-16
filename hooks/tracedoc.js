@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.2-mods.1'
+const VERSION = '0.5.3-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -82,7 +82,8 @@ const JSONL_SUFFIX = 'tracedoc.jsonl'
 //
 // A transcript separates the same rows on the same field, spelling the person
 // 'human' where the live engine says 'composer'. Both are taken, so this stays
-// the predicate the 0.3.x build applies to a transcript.
+// the predicate the 0.3.x build applies to a transcript — with one divergence,
+// stated below.
 //
 // The door is not a substitute for it. 'prompt' reads like "the person's
 // prompt" and is not: the engine injects its own messages down that door, and
@@ -95,10 +96,18 @@ const JSONL_SUFFIX = 'tracedoc.jsonl'
 // row's origin, so a spelling the engine changes shows up there as a prompt
 // row whose origin is new while `turns` stays put.
 //
-// The command record is the one row taken by something other than its origin:
-// the engine writes it, and what it is the record of is the person's command,
-// so it is recognised by the wrapper its record is built from. A 'command' row
-// without that wrapper is the command's output.
+// A slash command's record is not taken either. It was, as the one row admitted
+// by its wrapper rather than its origin, on the grounds that a command is
+// something the person typed. The ledger's reader asked for that to stop, and
+// the wrapper never earned the exception: the engine writes a 'command' row as
+// a record of the command rather than the person speaking, and the turn that
+// follows is the plugin answering itself — /on's answer is the plugin's own
+// paragraph. The wrapper is still recognised, to name a command's turn instead
+// of counting it as a question that went missing (see turn.complete).
+//
+// So this is where the two builds part on the same data. 0.3.x reads a
+// transcript, where a command's record carries the person's own origin and is
+// recorded; this one sees the live row, which says origin=engine.
 //
 // 'queue' is refused by its door, ahead of every other test, and it is not an
 // alternative. A queued prompt's record carries the person's origin like the
@@ -131,6 +140,9 @@ let sessionId = ''
 let pending = null
 let failures = []
 let jsonlErrors = []
+// Set when this turn's rows included a slash command's record, so the turn it
+// belongs to can be told from one whose question went missing.
+let commandTurn = false
 // The ledger file this instance last wrote, so the status file can name the
 // volume that is live. "Is the build I just edited the one running?" is
 // otherwise answerable only from file mtimes and the store's write history.
@@ -146,6 +158,7 @@ const counters = {
   aborted: 0,
   skippedDisabled: 0,
   orphanAnswers: 0,
+  commandTurnsSkipped: 0,
   subagentTurnsSkipped: 0,
   subagentAppendsSkipped: 0,
   appendsByDoor: {},
@@ -675,7 +688,7 @@ async function writeStatus($) {
     cwd: sessionCwd || null,
     ledgerSuffix: SUFFIX,
     jsonlSuffix: JSONL_SUFFIX,
-    questionRule: { origin: QUESTION_ORIGINS, commandRecord: COMMAND_RECORD },
+    questionRule: { origin: QUESTION_ORIGINS },
     counters: counters,
     pending: pending ? pending.q.slice(0, 120) : null,
     unreportedFailures: failures,
@@ -755,10 +768,11 @@ export function register(on) {
       counters.appendShapes[shape] = (counters.appendShapes[shape] || 0) + 1
 
       const text = messageText(message)
-      const isQuestion =
-        NOT_A_QUESTION_DOORS.indexOf(door) < 0 &&
-        (QUESTION_ORIGINS.indexOf(origin) >= 0 ||
-          (door === 'command' && text.indexOf(COMMAND_RECORD) >= 0))
+      const isQuestion = NOT_A_QUESTION_DOORS.indexOf(door) < 0 && QUESTION_ORIGINS.indexOf(origin) >= 0
+
+      // A command's record, recognised only to name the turn it belongs to: it
+      // is not a question and is not recorded.
+      if (door === 'command' && text.indexOf(COMMAND_RECORD) >= 0) commandTurn = true
 
       if (!isQuestion || !text) {
         // A row that is not recorded is sampled, so one that should have been
@@ -799,9 +813,18 @@ export function register(on) {
 
       const answer = e && typeof e.answer === 'string' ? e.answer.trim() : ''
       const question = await takePending($)
+      const wasCommand = commandTurn
+      commandTurn = false
       if (!question) {
-        // A turn with no question in hand: the question was dropped or the
-        // module reloaded across it. Counted, never guessed at.
+        // No question in hand. Two different things, and only one of them is
+        // bad news: a slash command's turn has nothing to record by design,
+        // while any other turn here means the question was dropped or the
+        // module reloaded across it. Counted apart, never guessed at.
+        if (wasCommand) {
+          counters.commandTurnsSkipped++
+          await safeStatus($)
+          return out
+        }
         counters.orphanAnswers++
         await safeStatus($)
         return out
@@ -827,6 +850,7 @@ export function register(on) {
       // an incomplete chain instead, but here the engine has told us the turn
       // ended — deferring would only lose it.
       const question = await takePending($)
+      commandTurn = false
       if (question) {
         await serialize(function () {
           return record($, question, '')
