@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.3-mods.1'
+const VERSION = '0.5.4-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -96,18 +96,25 @@ const JSONL_SUFFIX = 'tracedoc.jsonl'
 // row's origin, so a spelling the engine changes shows up there as a prompt
 // row whose origin is new while `turns` stays put.
 //
-// A slash command's record is not taken either. It was, as the one row admitted
-// by its wrapper rather than its origin, on the grounds that a command is
-// something the person typed. The ledger's reader asked for that to stop, and
-// the wrapper never earned the exception: the engine writes a 'command' row as
-// a record of the command rather than the person speaking, and the turn that
-// follows is the plugin answering itself — /on's answer is the plugin's own
-// paragraph. The wrapper is still recognised, to name a command's turn instead
-// of counting it as a question that went missing (see turn.complete).
+// A command's record is not taken, and its origin will not tell you so. That
+// was 0.5.3's error: on this engine a *plugin* command's record reports the
+// person's own origin. A session that ran /ai-tracedoc-mods:on at 21:09 on
+// 2026-10-16 carries origin.kind=human on that row of its transcript (live
+// spelling: composer), so an origin allowlist takes it — while the built-in
+// command run in the same session (/model) carries no origin at all and is
+// refused, and a command the module answers itself (/version) arrives as
+// origin=engine. Only the model-executed plugin command slips through, which
+// is exactly /on and /off, the two the ledger's reader asked to stop seeing.
 //
-// So this is where the two builds part on the same data. 0.3.x reads a
-// transcript, where a command's record carries the person's own origin and is
-// recorded; this one sees the live row, which says origin=engine.
+// So the record is identified by what it opens with, not by who it claims
+// wrote it: '<command-message>' or '<command-name>' (the engine's order varies
+// — a plugin command leads with the message, /model with the name), plus the
+// two rows a command drags along, '<local-command-caveat>' and
+// '<local-command-stdout>'.
+//
+// Opening with it is the whole test. A question that quotes a ledger entry
+// holds a '<command-message>' too — the reader pastes them — and that is a
+// question, and is recorded.
 //
 // 'queue' is refused by its door, ahead of every other test, and it is not an
 // alternative. A queued prompt's record carries the person's origin like the
@@ -116,7 +123,12 @@ const JSONL_SUFFIX = 'tracedoc.jsonl'
 // arrive again under 'prompt' when the turn starts. Refusing the door means the
 // question is the prompt row whichever order the two arrive in.
 const QUESTION_ORIGINS = ['human', 'composer']
-const COMMAND_RECORD = '<command-message>'
+const COMMAND_OPENERS = [
+  '<command-message>',
+  '<command-name>',
+  '<local-command-caveat>',
+  '<local-command-stdout>',
+]
 const NOT_A_QUESTION_DOORS = ['queue']
 
 const MARKER = '.tracedoc-on'
@@ -140,7 +152,7 @@ let sessionId = ''
 let pending = null
 let failures = []
 let jsonlErrors = []
-// Set when this turn's rows included a slash command's record, so the turn it
+// Set when this turn's rows included a command's record, so the turn it
 // belongs to can be told from one whose question went missing.
 let commandTurn = false
 // The ledger file this instance last wrote, so the status file can name the
@@ -768,11 +780,22 @@ export function register(on) {
       counters.appendShapes[shape] = (counters.appendShapes[shape] || 0) + 1
 
       const text = messageText(message)
-      const isQuestion = NOT_A_QUESTION_DOORS.indexOf(door) < 0 && QUESTION_ORIGINS.indexOf(origin) >= 0
 
-      // A command's record, recognised only to name the turn it belongs to: it
-      // is not a question and is not recorded.
-      if (door === 'command' && text.indexOf(COMMAND_RECORD) >= 0) commandTurn = true
+      // A command's record, named by the wrapper that opens it rather than by
+      // its origin — a plugin command reports the person's own, so the
+      // allowlist alone would take it. Not a question, and not recorded; also
+      // what names the turn, so a command-only turn is not counted as a
+      // question that went missing (see turn.complete).
+      let isCommandRecord = false
+      for (const opener of COMMAND_OPENERS) {
+        if (text.slice(0, opener.length) === opener) isCommandRecord = true
+      }
+      if (isCommandRecord) commandTurn = true
+
+      const isQuestion =
+        !isCommandRecord &&
+        NOT_A_QUESTION_DOORS.indexOf(door) < 0 &&
+        QUESTION_ORIGINS.indexOf(origin) >= 0
 
       if (!isQuestion || !text) {
         // A row that is not recorded is sampled, so one that should have been

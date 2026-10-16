@@ -427,12 +427,14 @@ async function testWhichRowsAreQuestions() {
   await complete('the real answer')
 
   // Turn B: a slash command is a turn of its own -- its record, then its output.
-  // Both rows say origin=engine on the live engine (the status file's
-  // appendShapes carries it: 'command | role=user | origin=engine' x2), which a
-  // pure origin allowlist refuses; the <command-message> wrapper is left only to
-  // name the turn, so this turn is not mistaken for a question that went missing.
-  await send(row('command', 'engine', '<command-message>ai-tracedoc:on</command-message> <command-name>/ai-tracedoc:on</command-name>'))
+  // The record is sent the way the live engine really sends it for a plugin
+  // command the model executes: origin=composer, the person's own. Taking it on
+  // origin is what 0.5.3 did, and this row is here to hold that shut. The
+  // built-in below leads with <command-name> instead and carries no origin at
+  // all; both are recognised by the wrapper that opens them.
+  await send(row('command', 'composer', '<command-message>ai-tracedoc-mods:on</command-message>\n<command-name>/ai-tracedoc-mods:on</command-name>'))
   await send(row('command', 'engine', '<local-command-stdout>TraceDoc recording is on</local-command-stdout>'))
+  await send(row('command', undefined, '<command-name>/model</command-name>\n<command-message>model</command-message>\n<command-args></command-args>'))
   await complete('Recorded.')
 
   // Turn C: the live spelling of the person's origin. The engine says
@@ -440,6 +442,13 @@ async function testWhichRowsAreQuestions() {
   // the two would record nothing at all on the other.
   await send(row('prompt', 'composer', 'a composer prompt'))
   await complete('Taken too.')
+
+  // Turn D: a question that quotes a command record. The ledger's reader pastes
+  // entries into the chat, so a wrapper inside a question is ordinary -- only a
+  // row that *opens* with one is a command's record. Refusing this one would be
+  // the silent loss the status file exists to reveal.
+  await send(row('prompt', 'composer', '这条还是被记了：\n<command-message>ai-tracedoc-mods:off</command-message>\n<command-name>/ai-tracedoc-mods:off</command-name>'))
+  await complete('Because the wrapper holds the opening, not the text.')
 
   // A compaction continuation, the caveat around a command, and blocks that are
   // not the person speaking at all.
@@ -460,9 +469,11 @@ async function testWhichRowsAreQuestions() {
   const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
   check('the prompt is recorded', text.indexOf('the real question') > 0, true)
   check('the live spelling of the person is recorded too', text.indexOf('a composer prompt') > 0, true)
-  check('the command record is not', text.indexOf('<command-message>ai-tracedoc:on</command-message>'), -1)
+  check('the command record is not', text.indexOf('<command-name>/ai-tracedoc-mods:on</command-name>'), -1)
+  check('the built-in command record is not', text.indexOf('<command-name>/model</command-name>'), -1)
   check('the command output is not', text.indexOf('<local-command-stdout>'), -1)
   check('the caveat is not', text.indexOf('<local-command-caveat>'), -1)
+  check('a question quoting one still is', text.indexOf('<command-message>ai-tracedoc-mods:off</command-message>') > 0, true)
   check('the continuation is not', text.indexOf('This session is being continued'), -1)
   check('a response block is not', text.indexOf('Here is the answer'), -1)
   check('a tool result is not', text.indexOf('file contents'), -1)
@@ -482,7 +493,7 @@ async function testWhichRowsAreQuestions() {
   }), true)
 
   const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
-  check('every row counted', status.counters.rowsNotRecorded, 8)
+  check('every row counted', status.counters.rowsNotRecorded, 9)
   // The command turn recorded nothing, and that is not a lost turn: the two are
   // counted apart, and only the second is bad news.
   check('the command turn is counted as one', status.counters.commandTurnsSkipped, 1)
