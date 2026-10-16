@@ -4,6 +4,8 @@
 
 这是 ai-tracedoc 的 **hooks module 版**:同样的账簿、同样的命令、同样的 `.tracedoc-on` 开关,但作为 Claude Code 的钩子模块运行,所以**没有二进制** —— 也就没有东西会让 Windows Smart App Control 拦下。
 
+**Windows、Linux、macOS 三个平台跑的是同一份代码。** 源码里没有一处平台分支,`basename`/`join` 自己认两种分隔符,也没有要编译、要签名、要按平台分发的东西(0.3.x 得给每个平台各带一份二进制)。Windows 和 Linux 上实际跑过、写出过账簿;macOS 没实测过 —— 那边「没有平台分支」是读代码读出来的,不是跑出来的。
+
 ## 安装
 
 **需要 Claude Code ≥ 2.1.287**(终端;Desktop app 是 2.1.286,它自带一份 Claude Code)。钩子模块是 2.1.287 起的机制,更低的版本引擎不会加载这个模块 —— 插件装了也不记录。查版本:`claude --version`。升不上去的机器只能用 0.3.x(exe 版)。
