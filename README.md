@@ -84,6 +84,12 @@ ai-tracedoc-mods: 0.5.0-mods.1
 jq -r 'select(.question | test("SAC")) | [.time, (.question | split("\n")[0])] | @tsv' *-tracedoc.jsonl
 ```
 
+## 维护状态
+
+**只有这个版本在维护。** 0.3.x(exe 版,[`didongke/ai-tracedoc`](https://github.com/didongke/ai-tracedoc))自 2026-10-16 起冻结 —— 那边不再修问题、不再加功能、不再发版,新东西只落在这里。那边仓库继续挂着,因为 Claude Code 低于 2.1.287 的机器加载不了钩子模块,只有它跑得起来。
+
+它和这个版本的关系,下一节说清楚;最要紧的一条是**别两个一起开**。
+
 ## 和 0.3.x(exe 版)的区别
 
 **不要两个一起开。** 两者写的是同一个文件名,而这个版本因为没有 append 只能整份读-改-写,0.3.x 是在锁里 append —— 两个同时写,在对方读和写之间落下的那条会被抹掉。装了这个就把 0.3.x 停掉(`claude plugin disable ai-tracedoc`),反之亦然。想两个都留着对比的话,把 `hooks/tracedoc.js` 里的 `SUFFIX` 改成别的名字。
