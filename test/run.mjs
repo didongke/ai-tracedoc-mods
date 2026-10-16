@@ -173,14 +173,27 @@ async function testFirstTurn() {
   const expected =
     HEADER_V1 +
     '\n## ' + dayOnly() + ' · What is 2+2?\n\n<!-- session: sess-1 -->\n\n' +
-    '**Question:** STAMP · What is 2+2?\n' +
+    '**Question:** STAMP\n' +
+    'What is 2+2?\n' +
     '\n' +
-    '\n**Answer:** 4\n' +
+    '**Answer:**\n' +
+    '4\n' +
     '\n'
   check('ledger bytes', actual, expected)
 
+  // The same turn, in the volume's JSONL sibling, written from the same entry in
+  // the same call -- so a question and its answer cannot land in one artifact
+  // and not the other.
+  const jsonl = readFileSync(join(root.cwd, today() + '-demo-tracedoc.jsonl'), 'utf8')
+  check(
+    'jsonl line',
+    jsonl.replace(/"time":"[^"]*"/, '"time":"AT"'),
+    '{"time":"AT","question":"What is 2+2?","answer":"4"}\n',
+  )
+
   const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
   check('counters.recorded', status.counters.recorded, 1)
+  check('counters.jsonlRows', status.counters.jsonlRows, 1)
   check('counters.turns', status.counters.turns, 1)
   check('counters.orphanAnswers', status.counters.orphanAnswers, 0)
   check('doors seen', JSON.stringify(status.counters.appendsByDoor), '{"prompt":1}')
@@ -201,20 +214,33 @@ async function testSecondTurn() {
 
   const before = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
 
+  // A question and an answer that are not ASCII, and an answer that holds a
+  // newline: the two things a line-oriented format gets wrong if it escapes the
+  // text carelessly or writes it as it comes.
   await hooks['session.append']($, {
     door: 'prompt',
-    message: { content: [{ type: 'text', text: 'Second question' }] },
+    message: { content: [{ type: 'text', text: '第二个问题' }] },
   }, async () => undefined)
-  await hooks['turn.complete']($, { answer: 'Second answer', reason: 'answer' }, async () => undefined)
+  await hooks['turn.complete']($, { answer: '第二行前\n"带引号"', reason: 'answer' }, async () => undefined)
 
   const after = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8')
   const delta = after.slice(before.length).replace(STAMP, 'STAMP')
   check(
     'byte delta of the second turn carries no new session heading',
     delta,
-    '**Question:** STAMP · Second question\n\n\n**Answer:** Second answer\n\n',
+    '**Question:** STAMP\n第二个问题\n\n**Answer:**\n第二行前\n"带引号"\n\n',
   )
   check('only one volume on disk', readdirSync(root.cwd).filter(function (n) { return n.endsWith('.md') }).length, 1)
+
+  const lines = readFileSync(join(root.cwd, today() + '-demo-tracedoc.jsonl'), 'utf8')
+    .split('\n')
+    .filter(function (line) { return line !== '' })
+  check('jsonl is one line per turn, an answer with a newline included', lines.length, 2)
+  check(
+    'jsonl line of the second turn',
+    lines[1].replace(/"time":"[^"]*"/, '"time":"AT"'),
+    '{"time":"AT","question":"第二个问题","answer":"第二行前\\n\\"带引号\\""}',
+  )
 }
 
 async function testMarkerAbsent() {
@@ -277,6 +303,13 @@ async function testVolumeRoll() {
     v1text.slice(-('\n\n---\n\nContinued in: [' + v2name + '](./' + v2name + ')\n').length),
     '\n\n---\n\nContinued in: [' + v2name + '](./' + v2name + ')\n',
   )
+
+  // The lines follow the ledger's volume, and volume 1's are not invented: the
+  // volume it never recorded a turn into gets no JSONL, rather than one
+  // reconstructed from what the ledger happens to hold.
+  const v2lines = readFileSync(join(root.cwd, today() + '-demo-tracedoc-02.jsonl'), 'utf8')
+  check('volume 2 jsonl holds the one turn', v2lines.split('\n').filter(Boolean).length, 1)
+  check('no jsonl is invented for volume 1', existsSync(join(root.cwd, today() + '-demo-tracedoc.jsonl')), false)
 }
 
 async function testDeferredQuestion() {
@@ -294,7 +327,14 @@ async function testDeferredQuestion() {
 
   const text = readFileSync(join(root.cwd, today() + '-demo-tracedoc.md'), 'utf8').replace(STAMP, 'STAMP')
   check('question-only entry, no Answer line', text.indexOf('**Answer:**'), -1)
-  check('ends question-only', text.endsWith('**Question:** STAMP · Asked but unanswered\n\n'), true)
+  check('ends question-only', text.endsWith('**Question:** STAMP\nAsked but unanswered\n\n'), true)
+  // A question with no answer is not a line: JSONL holds whole pairs, so this
+  // turn is in the ledger and not in the lines beside it -- which is exactly the
+  // difference counters.recorded - counters.jsonlRows names.
+  check('no jsonl for an unanswered turn', existsSync(join(root.cwd, today() + '-demo-tracedoc.jsonl')), false)
+  const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
+  check('the ledger recorded it', status.counters.recorded, 1)
+  check('the lines did not', status.counters.jsonlRows, 0)
 }
 
 async function testGapIsReported() {
@@ -340,7 +380,15 @@ async function testGapIsReported() {
     '> ⚠ TraceDoc: a turn went unrecorded — turn.complete failed at STAMP: disk is full',
   )
   check('the lost turn is absent', text.indexOf('This turn will not land'), -1)
-  check('the recorded turn is present', text.indexOf('**Answer:** And is recorded') > 0, true)
+  check('the recorded turn is present', text.indexOf('**Answer:**\nAnd is recorded') > 0, true)
+
+  // The turn that could not be written is absent from the lines too, and no
+  // line stands in for it: a gap in the ledger is a gap here, not a placeholder.
+  const lines = readFileSync(join(root.cwd, today() + '-demo-tracedoc.jsonl'), 'utf8')
+    .split('\n')
+    .filter(Boolean)
+  check('jsonl holds only the turn that landed', lines.length, 1)
+  check('and it is the one that landed', lines[0].indexOf('"question":"This one lands"') > 0, true)
 }
 
 // The shapes below are the ones a real session transcript on this machine
@@ -391,8 +439,18 @@ async function testWhichRowsAreQuestions() {
   check('a response block is not', text.indexOf('Here is the answer'), -1)
   check('a tool result is not', text.indexOf('file contents'), -1)
   // Once as a Question, once in the session heading the first question titles.
-  check('one Question line for the prompt', (text.match(/\*\*Question:\*\*[^\n]*the real question/g) || []).length, 1)
+  check('one Question line for the prompt', (text.match(/\*\*Question:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}\nthe real question/g) || []).length, 1)
   check('the heading titles the session with it', text.indexOf('· the real question\n') > 0, true)
+  // The layout itself: a label is a label and carries no text of its own, so a
+  // long question or answer can never be mistaken for part of the label line.
+  const labelLines = text.split('\n').filter(function (line) { return line.indexOf('**Question:**') === 0 })
+  check('every Question label is the time and nothing else', labelLines.every(function (line) {
+    return /^\*\*Question:\*\*( \d{4}-\d{2}-\d{2} \d{2}:\d{2})?$/.test(line)
+  }), true)
+  const answerLabels = text.split('\n').filter(function (line) { return line.indexOf('**Answer:**') === 0 })
+  check('every Answer label is the label alone', answerLabels.every(function (line) {
+    return line === '**Answer:**'
+  }), true)
 
   const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
   check('every row counted', status.counters.rowsNotRecorded, 6)

@@ -3,8 +3,10 @@
 .tracedoc-mods-status.json
 
 # Should not appear inside the plugin directory, but if a session ever runs
-# with this directory as its project, keep the ledger out of the repository.
+# with this directory as its project, keep the ledger -- and the lines written
+# beside it -- out of the repository.
 *-tracedoc*.md
+*-tracedoc*.jsonl
 .tracedoc-on
 .tracedoc-state.json
 .tracedoc.lock

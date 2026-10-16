@@ -39,7 +39,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.4.0-mods.1'
+const VERSION = '0.5.0-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -50,6 +50,18 @@ const VERSION = '0.4.0-mods.1'
 // means whichever appended inside the other's read-to-write window is erased.
 // One recorder per project, or a suffix of its own -- not both.
 const SUFFIX = 'tracedoc.md'
+
+// The second artifact: one JSON line per answered turn, a sibling of the ledger
+// under this extension instead. Written from the same entry in the same call,
+// never read back by anything here.
+//
+// It carries no header line: every line is a whole record, so `jq` reads the
+// file without skipping the first thing it finds, and a volume whose ledger
+// predates this build starts its lines at the first turn this build recorded
+// rather than at the top of the volume.
+//
+// ledgerMatch requires `.md`, so these files never enter volume discovery.
+const JSONL_SUFFIX = 'tracedoc.jsonl'
 
 // Which session.append rows are a question.
 //
@@ -104,10 +116,13 @@ let sessionCwd = ''
 let sessionId = ''
 let pending = null
 let failures = []
+let jsonlErrors = []
 
 const counters = {
   turns: 0,
   recorded: 0,
+  jsonlRows: 0,
+  jsonlFailures: 0,
   gapsReported: 0,
   hookFailures: 0,
   aborted: 0,
@@ -162,6 +177,34 @@ function localStamp(when) {
   )
 }
 
+// The same instant as localStamp, in ISO 8601 with the machine's own offset:
+// 2026-10-15T09:26:07+08:00. Built from local components rather than from
+// toISOString, which would state it in UTC and so print a time the ledger
+// beside it never shows. It carries seconds where the ledger stops at minutes:
+// the ledger's precision is fixed by the 0.3.x format, this one inherits no
+// such constraint.
+function isoStamp(when) {
+  const offset = -when.getTimezoneOffset()
+  const abs = Math.abs(offset)
+  return (
+    when.getFullYear() +
+    '-' +
+    pad2(when.getMonth() + 1) +
+    '-' +
+    pad2(when.getDate()) +
+    'T' +
+    pad2(when.getHours()) +
+    ':' +
+    pad2(when.getMinutes()) +
+    ':' +
+    pad2(when.getSeconds()) +
+    (offset < 0 ? '-' : '+') +
+    pad2(Math.floor(abs / 60)) +
+    ':' +
+    pad2(abs % 60)
+  )
+}
+
 function localDay(when) {
   return when.getFullYear() + '-' + pad2(when.getMonth() + 1) + '-' + pad2(when.getDate())
 }
@@ -190,6 +233,14 @@ function stem() {
 function volumeFilename(project, today, number) {
   if (number === 1) return today + '-' + project + '-' + SUFFIX
   return today + '-' + project + '-' + stem() + '-' + pad2(number) + '.md'
+}
+
+// A volume's JSONL sibling: the same name under the other extension, which is
+// all JSONL_SUFFIX differs from SUFFIX by. Derived from the ledger's own name
+// rather than computed alongside it, so a volume and its lines cannot drift
+// apart by a volume number, a day or a project name.
+function jsonlOf(name) {
+  return String(name).replace(/\.md$/, '.jsonl')
 }
 
 // Mirrors the 0.3.x VolumeNumber: a name with no -NN tail is volume 1.
@@ -252,21 +303,47 @@ function footerLink(nextFn) {
   return '\n\n---\n\nContinued in: [' + nextFn + '](./' + nextFn + ')\n'
 }
 
-// The parts-then-join shape is load-bearing, exactly as in the Go original:
-// joining inserts a separator after the empty terminator part as well, which
-// is what gives every entry the blank line the format calls for. Appending as
-// you go produces one newline fewer at each boundary, which silently forks the
-// ledger from the 0.3.x one.
+// One entry, laid out so a label never runs into its own text:
+//
+//   **Question:** 2026-10-15 09:26
+//   <the question>
+//
+//   **Answer:**
+//   <the answer>
+//
+// The label binds to its text by the newline alone, with no blank line between
+// them, so the two read as one block in raw text -- which is where this ledger
+// is actually read. A blank line there would separate them when the file is
+// rendered, at the price of every entry floating apart in the editor; the
+// second is the worse trade, so it is the one not taken.
+//
+// The blank line at the end of each entry is what separates it from the next.
+//
+// Each label is exactly that: the Question one carries the time and nothing
+// else, the Answer one carries nothing. This is what makes an entry three
+// pieces of information and no more -- a time, a question, an answer.
+//
+// The Go original concatenated a parts array to produce this file's spacing,
+// and staying byte-identical to it depended on getting that join exactly right.
+// That constraint left with the format: this writes the bytes it means.
 function formatEntries(entries) {
-  const parts = []
+  let out = ''
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i]
-    if (entry.t) parts.push('**Question:** ' + entry.t + ' · ' + entry.q + '\n')
-    else parts.push('**Question:** ' + entry.q + '\n')
-    if (entry.a) parts.push('\n**Answer:** ' + entry.a + '\n')
-    parts.push('')
+    out += '**Question:**' + (entry.t ? ' ' + entry.t : '') + '\n' + entry.q + '\n'
+    if (entry.a) out += '\n**Answer:**\n' + entry.a + '\n'
+    out += '\n'
   }
-  return parts.join('\n')
+  return out
+}
+
+// The whole of a JSONL line: three fields, in this order, and nothing else.
+// Written through JSON.stringify, so a question or an answer holding quotes,
+// newlines or any other character stays on one line, and text outside ASCII is
+// written as itself rather than as \u escapes -- a Chinese question stays
+// readable, and stays greppable by the text a person remembers typing.
+function jsonlLine(entry, at) {
+  return JSON.stringify({ time: at, question: entry.q, answer: entry.a }) + '\n'
 }
 
 // The 0.3.x fallbackTitle: the first question flattened to one line and cut to
@@ -306,6 +383,31 @@ async function appendText($, path, text) {
     body = await $.fs.read(path)
   }
   await $.fs.write(path, body + text)
+}
+
+// The JSONL half of a record, written from the same entry as the ledger and in
+// the same call, so the two can never describe different turns.
+//
+// Only an answered turn is written. A question that never got an answer and a
+// turn that failed to record are both absent, which is what keeps every line a
+// whole question and answer rather than one of three shapes. counters.recorded
+// and counters.jsonlRows are the pair to compare when the two should agree.
+//
+// A failure here is deliberately not a ledger gap line. That line says a turn
+// went unrecorded, and this turn was recorded -- in the ledger. So the failure
+// is counted and named in the status file, and the ledger says nothing, which
+// keeps the one warning it does carry unambiguous.
+async function appendJsonl($, cwd, volume, entry, at) {
+  if (!entry.a) return
+  try {
+    await appendText($, join(cwd, jsonlOf(volume)), jsonlLine(entry, at))
+    counters.jsonlRows++
+  } catch (err) {
+    counters.jsonlFailures++
+    const message = err && err.message ? String(err.message) : String(err)
+    jsonlErrors.push({ where: jsonlOf(volume), at: localStamp(new Date()), msg: message })
+    if (jsonlErrors.length > 50) jsonlErrors.shift()
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -460,6 +562,12 @@ async function record($, question, answer) {
   const now = new Date()
   const today = compactDay(now)
   const entry = { q: question.q, a: answer, t: question.t }
+  // The instant the question was asked: the moment the prompt row arrived, not
+  // the moment its answer did, because that is the time the ledger's own entry
+  // states and the two artifacts should not disagree about when a turn was.
+  // Absent only for a pending question written before this field existed, where
+  // the current clock is the honest fallback.
+  const at = typeof question.at === 'string' ? question.at : isoStamp(now)
 
   if (!(await recordingEnabled($, cwd))) {
     counters.skippedDisabled++
@@ -474,6 +582,7 @@ async function record($, question, answer) {
   if (placed && (await statOf($, join(cwd, placed)))) {
     await appendText($, join(cwd, placed), takeGaps() + formatEntries([entry]))
     counters.recorded++
+    await appendJsonl($, cwd, placed, entry, at)
     await $.store.set(stateKey(cwd), state)
     return
   }
@@ -503,10 +612,11 @@ async function record($, question, answer) {
   const date = entry.t ? entry.t.slice(0, 10) : localDay(now)
   const heading = sessionHeader(date, fallbackTitle(entry.q), id)
   await appendText($, join(cwd, current), takeGaps() + heading + formatEntries([entry]))
+  counters.recorded++
+  await appendJsonl($, cwd, current, entry, at)
 
   trackSession(state, id, current)
   state.volume = current
-  counters.recorded++
   await $.store.set(stateKey(cwd), state)
 }
 
@@ -543,10 +653,12 @@ async function writeStatus($) {
     session: sessionId || null,
     cwd: sessionCwd || null,
     ledgerSuffix: SUFFIX,
+    jsonlSuffix: JSONL_SUFFIX,
     questionRule: { origin: QUESTION_ORIGIN, door: 'prompt', commandRecord: COMMAND_RECORD },
     counters: counters,
     pending: pending ? pending.q.slice(0, 120) : null,
     unreportedFailures: failures,
+    jsonlErrors: jsonlErrors,
   }
   await $.fs.write(join($.plugin.root, STATUS_FILE), JSON.stringify(status, null, 2) + '\n')
 }
@@ -640,7 +752,8 @@ export function register(on) {
         return out
       }
 
-      pending = { q: text, t: localStamp(new Date()) }
+      const now = new Date()
+      pending = { q: text, t: localStamp(now), at: isoStamp(now) }
       await savePending($, pending)
       await safeStatus($)
     } catch (err) {
