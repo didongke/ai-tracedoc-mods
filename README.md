@@ -24,6 +24,21 @@ claude plugin marketplace add "<插件目录>"
 claude plugin install ai-tracedoc-mods@ai-tracedoc-mods
 ```
 
+### 更新
+
+会话里就能更新,不必退出会话,也不必重启:
+
+```
+/plugin marketplace update ai-tracedoc-mods   # 刷新这个 marketplace
+/reload-plugins                               # 让新的那份在当前会话里生效
+```
+
+也可以打开 `/plugin`:Marketplaces 标签 → 选中 → **Update marketplace**,或 Installed 标签 → 选中插件 → **Update now**。**没有 `/plugin update <名字>` 这个命令** —— 官方文档里 `update`、`init`、`details`、`prune`、`eval`、`test` 都**没有会话形态**,面板里那个是动作、不是命令。关掉 `/plugin` 面板时若有待生效的改动,它会自己替你跑一次 `/reload-plugins`。生效了没有,看 `/version` 报的号。
+
+第三方 marketplace **默认不自动更新**(只有 Anthropic 官方的会),想让它自己跟上就在 Marketplaces 标签里开 **Enable auto-update**;开着的时候更新会在你发第一条消息后十分钟内随机发生,会话里会提示 `Plugin updated: … · Run /reload-plugins to apply`。
+
+**直接改这个仓库那份(本地目录 marketplace)时,"更新"这一步不存在** —— 引擎读的就是工作树里的文件,改完 `/reload-plugins` 就行,连版本号都不用动。文档里点名钩子模块会被 `/reload-plugins` 换掉,所以改完当场就能用。reload 是重新加载:`register` 再跑一遍、`session.start` 再触发一次、内存里的计数器清零 —— 这个模块为此把待答的提问镜像进了 `$.store`(见代码里 `savePending` 上面那段注释),所以 reload 落在提问和回答之间也不会把那一轮弄丢;账簿的会话状态也在 `$.store` 里,所以 reload **不会**多写一个 `## 标题`。
+
 ## 使用
 
 在被记录的项目里:
