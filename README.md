@@ -11,9 +11,11 @@
 **需要 Claude Code ≥ 2.1.287**(终端;Desktop app 是 2.1.286,它自带一份 Claude Code)。钩子模块是 2.1.287 起的机制,更低的版本引擎不会加载这个模块 —— 插件装了也不记录。查版本:`claude --version`。低到用不了的机器只有 exe 版的 [`didongke/ai-tracedoc`](https://github.com/didongke/ai-tracedoc) 跑得起来。
 
 ```
-/plugin marketplace add didongke/ai-tracedoc-mods
+/plugin marketplace add https://github.com/didongke/ai-tracedoc-mods
 /plugin install ai-tracedoc-mods@ai-tracedoc-mods
 ```
+
+**用完整 HTTPS 地址,别用 `didongke/ai-tracedoc-mods` 这个简写。** 简写会被解析成 SSH 地址,而没连过 GitHub 的机器上没有 `github.com` 的 host key —— 克隆又是非交互跑的,没法问你信不信,于是直接 `Host key verification failed`(2026-10-19,一台全新的 macOS 上就这么失败的)。公开仓库走 HTTPS 不需要任何密钥。就是要走 SSH 也行:先在终端手动 `ssh -T git@github.com`,对着 GitHub 公布的指纹核对后回答 yes 会把它写进 `known_hosts`。
 
 装完打开 `/plugin`,标签页下面那行灰字应该写着 `1 mod active · ai-tracedoc-mods`。没有这行就是模块没加载,这时 `/version` 走的是 `commands/version.md` 那条兜底路。
 
