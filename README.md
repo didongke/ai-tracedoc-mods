@@ -2,7 +2,9 @@
 
 把每个项目里的 Claude Code 问答记进一份 TraceDoc 账簿。
 
-它以 Claude Code 的**钩子模块**(hooks module)运行 —— **没有二进制**,也就没有东西会让 Windows Smart App Control 拦下。每个问答写两份:人看的 Markdown 账簿、机器读的 JSONL。源码里没有一处平台分支,Windows、Linux、macOS 都实际跑过、写出过账簿(macOS 最后补上,2026-10-22)。
+它以 Claude Code 的钩子模块(hooks module)运行。
+每个问答写两份:人看的 Markdown 账簿、机器读的 JSONL。
+源码里没有一处平台分支,Windows、Linux、macOS 都实际跑过、写出过账簿。
 
 ## 价值
 
