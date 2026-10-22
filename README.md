@@ -80,18 +80,3 @@
 只记人写的问题和模型的回答。
 回答那一格是每轮的**最终答复**,不是 transcript —— 不含工具输出和思考;没答完的那轮留一个空 `**Answer:**`。子代理的行不算。
 引擎通知、system-reminder、工具结果、别的会话的消息,一律不进账簿。
-
-## 文件
-
-```
-.claude-plugin/plugin.json        插件清单
-.claude-plugin/marketplace.json   marketplace 清单
-hooks/hooks.json                  声明 modules: ["./tracedoc.js"]
-hooks/tracedoc.js                 记录器本体,也是 /version 的应答方
-commands/{on,off}.md              开、关
-commands/version.md               声明 /version;正文是模块没加载时的兜底
-tsconfig.json                     编辑器类型检查入口
-test/run.mjs                      格式护栏
-```
-
-加载器运行前会静态读模块源码:把 `on`、`$`、`$.env` 不按字面拼写的模块不会被加载 —— 所以没有别名、没有解构、没有拼出来的事件名。代码里凡是故意这么写的地方都标了出处,明知有代价的地方都写了代价,提问判据和卷号解析就是两处。
