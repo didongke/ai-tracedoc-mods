@@ -81,34 +81,6 @@
 回答那一格是每轮的**最终答复**,不是 transcript —— 不含工具输出和思考;没答完的那轮留一个空 `**Answer:**`。子代理的行不算。
 引擎通知、system-reminder、工具结果、别的会话的消息,一律不进账簿。
 
-## 限制
-
-1. **没有补记。** 拿不到就永远拿不到 —— 但会写进账簿:下一次成功记录时多一行 `> ⚠ TraceDoc: a turn went unrecorded — …`。丢东西不瞒着,但确实丢了。这是换"不被 SAC 拦"的代价。
-2. **同一项目两个会话会互相覆盖。** 只有单会话内一条串行链,没有跨进程锁。
-3. **会话标题退化成首问**(压平一行、截 40 字)。
-4. **提问时间是钩子运行时刻**,不是提问时刻;差毫秒级。
-5. **换个加载身份会多一个 `## 标题`** —— 会话状态在引擎 store 里、按身份分开(`--plugin-dir` 和装进插件目录不通用);条目一条不丢。
-
-## 诊断
-
-插件目录下的 `.tracedoc-mods-status.json` 每轮重写。"怎么没记上"就看它:
-
-- `updatedAt` / `session` / `volume` —— 谁、哪一卷写的;配 `version` 就知道"刚改完跑的是不是新的那份"
-- `recorded` / `turns` / `skippedDisabled` —— 记了几轮 / 发生几轮 / 没开记录跳过几轮
-- `jsonlRows` / `jsonlFailures` —— `recorded` 比 `jsonlRows` 大是正常的;`jsonlFailures > 0` 就是那一轮只进了账簿,`jsonlErrors` 有原文。这种失败**不会**在账簿里留 ⚠ 行,那行的意思必须是"这一轮没记上"
-- `commandTurnsSkipped` —— 命令轮,涨是正常的
-- `orphanAnswers` —— **大于 0 就是真丢了东西**
-- `rowsNotRecorded` / `appendShapes` / `doorSamples` —— 被拒的行数、每行的形状计数、每个 door 的一条样本。哪天 `prompt | … | origin=<新叫法>` 在涨而 `turns` 不涨,就是引擎换了叫法,判据得跟着改
-- `hookFailures` / `unreportedFailures` —— 钩子自己出错的原文
-
-## 测试
-
-```
-node test/run.mjs hooks/tracedoc.js
-```
-
-用假的 `$` 驱动记录器,断言账簿的字节(卷头、标题、排版、200 KiB 滚卷、未答的收尾、写盘失败的缺口行、哪些行算提问)、JSONL 的每一行、状态文件报的版本与计数。需要 Node,无依赖。
-
 ## 文件
 
 ```
