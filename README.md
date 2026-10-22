@@ -4,7 +4,7 @@
 
 它以 Claude Code 的**钩子模块**(hooks module)运行,所以**没有二进制** —— 也就没有东西会让 Windows Smart App Control 拦下。每个问答同时写两份:人看的 Markdown 账簿,机器读的 JSONL。
 
-**Windows、Linux、macOS 三个平台跑的是同一份代码。** 源码里没有一处平台分支,`basename`/`join` 自己认两种分隔符,也没有要编译、要签名、要按平台分发的东西。Windows 和 Linux 上实际跑过、写出过账簿;macOS 没实测过 —— 那边「没有平台分支」是读代码读出来的,不是跑出来的。
+**Windows、Linux、macOS 三个平台跑的是同一份代码。** 源码里没有一处平台分支,`basename`/`join` 自己认两种分隔符,也没有要编译、要签名、要按平台分发的东西。**三个平台都实际跑过、写出过账簿** —— macOS 是最后补上的,2026-10-22。
 
 ## 价值
 
