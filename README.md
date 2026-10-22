@@ -35,10 +35,6 @@
 /reload-plugins
 ```
 
-`/plugin` 面板里效果一样(Marketplaces → **Update marketplace**,Installed → **Update now**),关面板时会替你跑一次 `/reload-plugins`。**没有 `/plugin update <名字>` 这个命令** —— `update`、`init`、`details` 这些都没有会话形态,面板里那个是动作。第三方 marketplace 默认不自动更新,要跟就在面板里开 **Enable auto-update**。生效没有,看 `/version`。
-
-直接改这个仓库那份时没有"更新"这一步:引擎读的就是工作树,改完 `/reload-plugins` 即可,版本号都不用动。reload 会重跑 `register` 和 `session.start` —— 待答的提问和会话状态都镜像在 `$.store` 里,所以落在提问和回答之间不丢那一轮,也不会多写一个 `## 标题`。
-
 ## 使用
 
 | 命令 | 作用 |
