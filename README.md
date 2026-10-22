@@ -74,19 +74,6 @@
 - **只写答完的问答** —— 没等到答案的、没记上的,只在账簿里
 - 中文原样写,不转 `\uXXXX`;换行和引号按 JSON 转义,一条再长也始终是一行
 - 没有表头行,`jq` 不用跳第一行。历史从装上之后的第一条开始,和"没有补记"是同一条原则
-- 别用 `cat *-tracedoc.jsonl` 拼:字节序里 `-02.jsonl` 排在基础卷前面,要按时间读就把文件显式列出
-
-挑出提到 SAC 的问题:
-
-```
-jq -r 'select(.question | test("SAC")) | [.time, (.question | split("\n")[0])] | @tsv' *-tracedoc.jsonl
-```
-
-没装 `jq` 也行,node 等价:
-
-```
-node -e 'const fs=require("fs");for(const f of process.argv.slice(1))fs.readFileSync(f,"utf8").split("\n").filter(Boolean).map(JSON.parse).filter(o=>/SAC/.test(o.question)).forEach(o=>console.log(o.time+"\t"+o.question.split("\n")[0]))' *-tracedoc.jsonl
-```
 
 ## 记什么、不记什么
 
