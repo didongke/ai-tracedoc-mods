@@ -77,11 +77,6 @@
 
 ## 记什么、不记什么
 
-**只记人写的问题和模型的回答。** 两条判据,少一条就漏:
-
-- **谁写的** —— `origin.kind` ∈ {`human`, `composer`}(transcript 报 `human`,实时行报 `composer`)。光看 door 不够:引擎也往 `prompt` 门里塞自己的消息,只看 door 会把后台任务完成通知(`<task-notification>`)当成提问。
-- **它是什么** —— 命令的记录行不报 engine:**插件命令**(`/on`、`/off`)报的是人的 origin,靠 origin 认就会收下(0.5.3 漏在这里)。所以命令靠**开头**认:以 `<command-message>`、`<command-name>`、`<local-command-caveat>`、`<local-command-stdout>` 开头的一律不收。"以……开头"是判据的全部 —— 提问里**引用**一条账簿记录也带着这些标记,那是提问,照收。
-
 回答那一格是每轮的**最终答复**,不是 transcript —— 不含工具输出和思考;没答完的那轮留一个空 `**Answer:**`。子代理的行不算。引擎通知、system-reminder、工具结果、别的会话的消息,一律不进账簿。这些都是从本机逐行核出来的行形状,不是猜的。
 
 一轮只留一条提问(`pending` 只有一个槽,后到的顶掉先到的)。整轮只有命令的,不进账簿,记在 `commandTurnsSkipped` 里,和"提问丢了"(`orphanAnswers`)分开数。
