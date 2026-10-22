@@ -28,8 +28,6 @@
 建议用完整 HTTPS 地址,其次用 `didongke/ai-tracedoc-mods` 简写。
 装完打开 `/plugin`,标签页下面那行灰字应写着 `1 mod active · ai-tracedoc-mods`。
 
-> **别和 exe 版的 ai-tracedoc 同时开在一个项目里**([`didongke/ai-tracedoc`](https://github.com/didongke/ai-tracedoc),也是低于 2.1.287 的机器唯一能用的那版)。它写同一个账簿文件名,而这份没有 append、只能整份读-改-写 —— 两个一起写会互相抹掉。
-
 ### 更新
 
 ```
