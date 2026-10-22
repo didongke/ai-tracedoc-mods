@@ -16,16 +16,17 @@
 
 ## 安装
 
-**需要 Claude Code ≥ 2.1.287**(Desktop app 是 2.1.286)。更低的版本引擎不加载钩子模块,装了也不记录。查版本:`claude --version`。
+需要 Claude Code ≥ 2.1.287。
+更低的版本引擎不加载钩子模块,装了也不记录。
+查版本:`claude --version`。
 
 ```
 /plugin marketplace add https://github.com/didongke/ai-tracedoc-mods
 /plugin install ai-tracedoc-mods@ai-tracedoc-mods
 ```
 
-**用完整 HTTPS 地址,别用 `didongke/ai-tracedoc-mods` 简写**:简写会被解析成 SSH 地址,没连过 GitHub 的机器上没有 `github.com` 的 host key,而非交互的克隆没法问你信不信,于是直接 `Host key verification failed`(2026-10-19 一台新 macOS 上就是这么失败的)。公开仓库走 HTTPS 不需要任何密钥。开发时改用本地目录:`claude plugin marketplace add "<插件目录>"`,再跑同样的 install。
-
-装完打开 `/plugin`,标签页下面那行灰字应写着 `1 mod active · ai-tracedoc-mods`。没有这行就是模块没加载,`/version` 走的是 `commands/version.md` 那条兜底路。
+建议用完整 HTTPS 地址,其次用 `didongke/ai-tracedoc-mods` 简写。
+装完打开 `/plugin`,标签页下面那行灰字应写着 `1 mod active · ai-tracedoc-mods`。
 
 > **别和 exe 版的 ai-tracedoc 同时开在一个项目里**([`didongke/ai-tracedoc`](https://github.com/didongke/ai-tracedoc),也是低于 2.1.287 的机器唯一能用的那版)。它写同一个账簿文件名,而这份没有 append、只能整份读-改-写 —— 两个一起写会互相抹掉。
 
