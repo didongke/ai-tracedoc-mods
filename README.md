@@ -2,8 +2,8 @@
 
 把每个项目里的 Claude Code 问答记进一份 TraceDoc 账簿。
 
-它以 Claude Code 的钩子模块(hooks module)运行。
-每个问答写两份：人看的 Markdown 账簿，机器读的 JSONL。
+它以 Claude Code 的钩子模块(hooks module)运行。<br>
+每个问答写两份：人看的 Markdown 账簿，机器读的 JSONL。<br>
 三个平台（Windows、Linux、macOS）使用相同源码，都实际运行和测试过。
 
 ## 价值
@@ -36,7 +36,7 @@
 /plugin install ai-tracedoc-mods@ai-tracedoc-mods
 ```
 
-建议用完整 HTTPS 地址,其次用 `didongke/ai-tracedoc-mods` 简写。
+建议用完整 HTTPS 地址,其次用 `didongke/ai-tracedoc-mods` 简写。<br>
 装完打开 `/plugin`,标签页下面那行灰字应写着 `1 mod active · ai-tracedoc-mods`。
 
 ### 更新
