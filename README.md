@@ -56,6 +56,8 @@
 | `/ai-tracedoc-mods:off` | 停止记录(删除 `.tracedoc-on`) |
 | `/ai-tracedoc-mods:version` | 显示版本 |
 
+没开记录的项目,**每次启动 Claude Code 时**右上角会提示一次 `/ai-tracedoc-mods:on`,3 秒后自己消失(同一个会话里 `/reload-plugins` 不会重复提示)。
+
 问答写进项目根目录的**两份**文件:
 
 ```

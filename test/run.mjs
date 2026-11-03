@@ -556,22 +556,34 @@ async function testFirstRunPrompt() {
   rmSync(join(root.cwd, '.tracedoc-on'))
   const $ = makeDollar(root, root.store)
   const { hooks } = await load('p')
-  await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
+  await hooks['session.start']($, { cwd: root.cwd, isInteractive: true }, async () => undefined)
   check('told once that recording is off', root.toasts.length, 1)
   check('with the command that switches it on', root.toasts[0].text.indexOf('/ai-tracedoc-mods:on') > 0, true)
   check('and it clears itself', root.toasts[0].options && root.toasts[0].options.timeoutMs, 3000)
 
-  // $.store is what keeps a reload — which fires session.start again — and the
-  // next session from saying it a second time.
+  // A hot reload fires session.start again in the same session. That is not a
+  // start, and the store's record of the session it last told is what says so.
   const reloaded = await load('p2')
-  await reloaded.hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
-  check('not again on the next start', root.toasts.length, 1)
+  await reloaded.hooks['session.start']($, { cwd: root.cwd, isInteractive: true }, async () => undefined)
+  check('not again on a reload in the same session', root.toasts.length, 1)
+
+  // The next session is a new one: told again, every time, until it is on.
+  root.sessionId = 'sess-2'
+  const next = await load('p3')
+  await next.hooks['session.start']($, { cwd: root.cwd, isInteractive: true }, async () => undefined)
+  check('told again in the next session', root.toasts.length, 2)
+
+  // A run with nobody at the prompt is not told; there is no ui to toast.
+  root.sessionId = 'sess-3'
+  const headless = await load('p4')
+  await headless.hooks['session.start']($, { cwd: root.cwd, isInteractive: false }, async () => undefined)
+  check('nothing said to a headless run', root.toasts.length, 2)
 
   // A project that is already recording says nothing at all.
   const on = scenario('firstrun-on')
   const $on = makeDollar(on, on.store)
-  const other = await load('p3')
-  await other.hooks['session.start']($on, { cwd: on.cwd }, async () => undefined)
+  const other = await load('p5')
+  await other.hooks['session.start']($on, { cwd: on.cwd, isInteractive: true }, async () => undefined)
   check('nothing said when recording is on', on.toasts.length, 0)
 }
 
