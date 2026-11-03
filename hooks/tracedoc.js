@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.4-mods.1'
+const VERSION = '0.5.5-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -134,7 +134,9 @@ const NOT_A_QUESTION_DOORS = ['queue']
 const MARKER = '.tracedoc-on'
 const STATE_KEY = 'tracedoc.state.v1.'
 const PENDING_KEY = 'tracedoc.pending.v1.'
+const PROMPTED_KEY = 'tracedoc.prompted.v1.'
 const STATUS_FILE = '.tracedoc-mods-status.json'
+const OFF_TOAST = 'TraceDoc is off — run /ai-tracedoc-mods:on to start recording'
 const GAP_PREFIX = '> ⚠ TraceDoc: '
 const VOLUME_THRESHOLD = 200 * 1024
 const READ_LIMIT = 4 * 1024 * 1024
@@ -216,7 +218,9 @@ function localStamp(when) {
     ' ' +
     pad2(when.getHours()) +
     ':' +
-    pad2(when.getMinutes())
+    pad2(when.getMinutes()) +
+    ':' +
+    pad2(when.getSeconds())
   )
 }
 
@@ -598,6 +602,28 @@ async function recordingEnabled($, cwd) {
   return (await statOf($, join(cwd, MARKER))) !== null
 }
 
+// Says, once per project, that recording is off — and only when the switch is
+// the reason. A toast rather than a ledger line: nothing has been recorded and
+// there is no turn to report. $.store carries the answer across sessions, so a
+// project that is never switched on is told once and then left alone, and a
+// hot reload (which fires session.start again) stays quiet. A non-interactive
+// run has no ui to toast, and nobody there to read it.
+async function promptOnceIfOff($) {
+  try {
+    if (!sessionCwd) return
+    if (await recordingEnabled($, sessionCwd)) return
+    const key = PROMPTED_KEY + String(sessionCwd).toLowerCase()
+    if (await $.store.get(key)) return
+    // Spelled at the call site, as the loader's static read requires. Where a
+    // run has no ui, the call throws and the catch below swallows it — and the
+    // key is left unset, so an interactive session still gets told.
+    $.ui.toast(OFF_TOAST, { timeoutMs: 3000 })
+    await $.store.set(key, true)
+  } catch (err) {
+    // A toast that did not appear is not a lost turn; there is nothing to count.
+  }
+}
+
 async function record($, question, answer) {
   const cwd = sessionCwd || (await $.session.root())
   const id = sessionId || (await $.session.id())
@@ -726,6 +752,7 @@ export function register(on) {
       sessionCwd = e && e.cwd ? e.cwd : await $.session.root()
       sessionId = await $.session.id()
       await safeStatus($)
+      await promptOnceIfOff($)
     } catch (err) {
       noteFailure('session.start', err)
     }

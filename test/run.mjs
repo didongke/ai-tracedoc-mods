@@ -9,7 +9,7 @@
 // in README.md about gating, rolling and gap-reporting is checked here rather
 // than asserted in prose. Needs Node, no dependencies.
 
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, statSync, readdirSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, statSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -87,6 +87,11 @@ function makeDollar(root, store) {
       },
     },
     plugin: { root: root.pluginRoot, name: root.pluginName },
+    ui: {
+      toast(text, options) {
+        root.toasts.push({ text: text, options: options })
+      },
+    },
   }
 }
 
@@ -129,7 +134,7 @@ function dayOnly() {
   const d = new Date()
   return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate())
 }
-const STAMP = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}/g
+const STAMP = /\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/g
 
 const HEADER_V1 =
   '# demo · TraceDoc\n\n' +
@@ -144,7 +149,7 @@ function scenario(name) {
   mkdirSync(cwd, { recursive: true })
   mkdirSync(pluginRoot, { recursive: true })
   writeFileSync(join(cwd, '.tracedoc-on'), 'ai-tracedoc: recording enabled for this project\n')
-  return { name, cwd, pluginRoot, store: new Map(), sessionId: 'sess-1', registered: [], pluginName: 'ai-tracedoc-mods' }
+  return { name, cwd, pluginRoot, store: new Map(), sessionId: 'sess-1', registered: [], toasts: [], pluginName: 'ai-tracedoc-mods' }
 }
 
 // ---------------------------------------------------------------------------
@@ -479,13 +484,13 @@ async function testWhichRowsAreQuestions() {
   check('a tool result is not', text.indexOf('file contents'), -1)
   check('an engine-injected prompt is not', text.indexOf('<task-notification>'), -1)
   // Once as a Question, once in the session heading the first question titles.
-  check('one Question line for the prompt', (text.match(/\*\*Question:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}\nthe real question/g) || []).length, 1)
+  check('one Question line for the prompt', (text.match(/\*\*Question:\*\* \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\nthe real question/g) || []).length, 1)
   check('the heading titles the session with it', text.indexOf('· the real question\n') > 0, true)
   // The layout itself: a label is a label and carries no text of its own, so a
   // long question or answer can never be mistaken for part of the label line.
   const labelLines = text.split('\n').filter(function (line) { return line.indexOf('**Question:**') === 0 })
   check('every Question label is the time and nothing else', labelLines.every(function (line) {
-    return /^\*\*Question:\*\*( \d{4}-\d{2}-\d{2} \d{2}:\d{2})?$/.test(line)
+    return /^\*\*Question:\*\*( \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})?$/.test(line)
   }), true)
   const answerLabels = text.split('\n').filter(function (line) { return line.indexOf('**Answer:**') === 0 })
   check('every Answer label is the label alone', answerLabels.every(function (line) {
@@ -545,6 +550,33 @@ async function testVersionCommand() {
 
 // ---------------------------------------------------------------------------
 
+async function testFirstRunPrompt() {
+  console.log('\ntest: a project that is not switched on')
+  const root = scenario('firstrun')
+  rmSync(join(root.cwd, '.tracedoc-on'))
+  const $ = makeDollar(root, root.store)
+  const { hooks } = await load('p')
+  await hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
+  check('told once that recording is off', root.toasts.length, 1)
+  check('with the command that switches it on', root.toasts[0].text.indexOf('/ai-tracedoc-mods:on') > 0, true)
+  check('and it clears itself', root.toasts[0].options && root.toasts[0].options.timeoutMs, 3000)
+
+  // $.store is what keeps a reload — which fires session.start again — and the
+  // next session from saying it a second time.
+  const reloaded = await load('p2')
+  await reloaded.hooks['session.start']($, { cwd: root.cwd }, async () => undefined)
+  check('not again on the next start', root.toasts.length, 1)
+
+  // A project that is already recording says nothing at all.
+  const on = scenario('firstrun-on')
+  const $on = makeDollar(on, on.store)
+  const other = await load('p3')
+  await other.hooks['session.start']($on, { cwd: on.cwd }, async () => undefined)
+  check('nothing said when recording is on', on.toasts.length, 0)
+}
+
+// ---------------------------------------------------------------------------
+
 await testFirstTurn()
 await testSecondTurn()
 await testMarkerAbsent()
@@ -553,6 +585,7 @@ await testDeferredQuestion()
 await testGapIsReported()
 await testWhichRowsAreQuestions()
 await testVersionCommand()
+await testFirstRunPrompt()
 
 console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all checks passed'))
 process.exit(failures ? 1 : 0)
