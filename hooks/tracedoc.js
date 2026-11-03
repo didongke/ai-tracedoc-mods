@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.5-mods.1'
+const VERSION = '0.5.6-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -749,7 +749,16 @@ export function register(on) {
   on('session.start', async ($, e, next) => {
     const out = await next(e)
     try {
-      sessionCwd = e && e.cwd ? e.cwd : await $.session.root()
+      // The project is the session's root, not the directory it happens to be
+      // in. A shell `cd` moves the cwd but not the root, and session.start
+      // runs again on every hot reload — so reading the cwd there let a
+      // subdirectory pass for a project of its own: no marker in it, so
+      // recording looked off and the turns would have gone to a ledger there.
+      try {
+        sessionCwd = await $.session.root()
+      } catch (err) {
+        sessionCwd = e && e.cwd ? e.cwd : ''
+      }
       sessionId = await $.session.id()
       await safeStatus($)
       await promptOnceIfOff($)

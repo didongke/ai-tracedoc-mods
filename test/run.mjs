@@ -577,6 +577,26 @@ async function testFirstRunPrompt() {
 
 // ---------------------------------------------------------------------------
 
+// A session that has cd'd into a subdirectory: session.start fires there, on
+// every hot reload, and the cwd it is handed is the subdirectory. The project
+// is the session's root — where it started, which a shell cd does not move —
+// and reading the cwd instead mistook the subdirectory for a project with no
+// marker, so recording looked off and nothing was written.
+async function testRootNotCwd() {
+  console.log('\ntest: a session whose cwd has wandered')
+  const root = scenario('wander')
+  const elsewhere = join(root.cwd, 'code', 'plugin')
+  mkdirSync(elsewhere, { recursive: true })
+  const $ = makeDollar(root, root.store)
+  const { hooks } = await load('w')
+  await hooks['session.start']($, { cwd: elsewhere }, async () => undefined)
+  const status = JSON.parse(readFileSync(join(root.pluginRoot, '.tracedoc-mods-status.json'), 'utf8'))
+  check('the project is the session root', status.cwd, root.cwd)
+  check('and it is not mistaken for switched off', root.toasts.length, 0)
+}
+
+// ---------------------------------------------------------------------------
+
 await testFirstTurn()
 await testSecondTurn()
 await testMarkerAbsent()
@@ -586,6 +606,7 @@ await testGapIsReported()
 await testWhichRowsAreQuestions()
 await testVersionCommand()
 await testFirstRunPrompt()
+await testRootNotCwd()
 
 console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all checks passed'))
 process.exit(failures ? 1 : 0)
