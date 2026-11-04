@@ -561,23 +561,22 @@ async function testFirstRunPrompt() {
   check('with the command that switches it on', root.toasts[0].text.indexOf('/ai-tracedoc-mods:on') > 0, true)
   check('and it clears itself', root.toasts[0].options && root.toasts[0].options.timeoutMs, 3000)
 
-  // A hot reload fires session.start again in the same session. That is not a
-  // start, and the store's record of the session it last told is what says so.
+  // Every start says it, including `claude -c`, which keeps the session id —
+  // there is no field on session.start that tells a start from a hot reload,
+  // so a reload says it again rather than risk silencing the resumed case.
   const reloaded = await load('p2')
   await reloaded.hooks['session.start']($, { cwd: root.cwd, isInteractive: true }, async () => undefined)
-  check('not again on a reload in the same session', root.toasts.length, 1)
+  check('said again on the next start', root.toasts.length, 2)
 
-  // The next session is a new one: told again, every time, until it is on.
-  root.sessionId = 'sess-2'
-  const next = await load('p3')
-  await next.hooks['session.start']($, { cwd: root.cwd, isInteractive: true }, async () => undefined)
-  check('told again in the next session', root.toasts.length, 2)
+  // A resumed session keeps the id and is still told.
+  const resumed = await load('p3')
+  await resumed.hooks['session.start']($, { cwd: root.cwd, isInteractive: true }, async () => undefined)
+  check('and on a resumed session', root.toasts.length, 3)
 
   // A run with nobody at the prompt is not told; there is no ui to toast.
-  root.sessionId = 'sess-3'
   const headless = await load('p4')
   await headless.hooks['session.start']($, { cwd: root.cwd, isInteractive: false }, async () => undefined)
-  check('nothing said to a headless run', root.toasts.length, 2)
+  check('nothing said to a headless run', root.toasts.length, 3)
 
   // A project that is already recording says nothing at all.
   const on = scenario('firstrun-on')

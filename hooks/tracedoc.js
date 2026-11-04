@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.7-mods.1'
+const VERSION = '0.5.8-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -134,7 +134,6 @@ const NOT_A_QUESTION_DOORS = ['queue']
 const MARKER = '.tracedoc-on'
 const STATE_KEY = 'tracedoc.state.v1.'
 const PENDING_KEY = 'tracedoc.pending.v1.'
-const PROMPTED_KEY = 'tracedoc.prompted.v1.'
 const STATUS_FILE = '.tracedoc-mods-status.json'
 const OFF_TOAST = 'TraceDoc is off — run /ai-tracedoc-mods:on to start recording'
 const GAP_PREFIX = '> ⚠ TraceDoc: '
@@ -602,29 +601,25 @@ async function recordingEnabled($, cwd) {
   return (await statOf($, join(cwd, MARKER))) !== null
 }
 
-// Says that recording is off — once per session, and only when the switch is
-// the reason. A toast rather than a ledger line: nothing has been recorded and
+// Says that recording is off, at every start — and only when the switch is the
+// reason. A toast rather than a ledger line: nothing has been recorded and
 // there is no turn to report.
 //
-// "Every start" is what the person asked for, and a hot reload fires
-// session.start again without being a start, so the store keeps the session id
-// it last told: a reload in the same session matches and stays quiet, while the
-// next session carries another id and is told again. A project that is never
-// switched on therefore hears it at every launch. A non-interactive run has no
-// ui to toast, and nobody there to read it.
-async function promptOnceIfOff($, e) {
+// Every start includes `claude -c`, which resumes a session and so keeps its
+// id; asking the session id to tell a start from a hot reload therefore also
+// silenced the resumed case, which the person wanted told. session.start says
+// neither why it fired nor which process it is in, so there is no signal left
+// to be exact with: this says it whenever it runs, and a reload — which runs
+// it too — repeats it. A non-interactive run has no ui to toast, and nobody
+// there to read it.
+async function promptIfOff($, e) {
   try {
     if (!sessionCwd) return
     if (e && e.isInteractive === false) return
     if (await recordingEnabled($, sessionCwd)) return
-    const key = PROMPTED_KEY + String(sessionCwd).toLowerCase()
-    const told = await $.store.get(key)
-    if (told != null && sessionId && String(told) === String(sessionId)) return
     // Spelled at the call site, as the loader's static read requires. Where a
-    // run has no ui, the call throws and the catch below swallows it — and the
-    // key is left as it was, so an interactive session still gets told.
+    // run has no ui, the call throws and the catch below swallows it.
     $.ui.toast(OFF_TOAST, { timeoutMs: 3000 })
-    await $.store.set(key, sessionId || true)
   } catch (err) {
     // A toast that did not appear is not a lost turn; there is nothing to count.
   }
@@ -767,7 +762,7 @@ export function register(on) {
       }
       sessionId = await $.session.id()
       await safeStatus($)
-      await promptOnceIfOff($, e)
+      await promptIfOff($, e)
     } catch (err) {
       noteFailure('session.start', err)
     }
