@@ -41,7 +41,7 @@
 // wrong with a second copy is that it stops matching. test/run.mjs holds the two
 // together: the harness reads the manifest beside this module and fails if the
 // version this reports is not the one the plugin declares.
-const VERSION = '0.5.8-mods.1'
+const VERSION = '0.5.9-mods.1'
 
 // The ledger's filename suffix: the same one the 0.3.x line writes, so this is
 // a drop-in and a project's ledger keeps its name across the change.
@@ -134,8 +134,13 @@ const NOT_A_QUESTION_DOORS = ['queue']
 const MARKER = '.tracedoc-on'
 const STATE_KEY = 'tracedoc.state.v1.'
 const PENDING_KEY = 'tracedoc.pending.v1.'
+const LIVE_KEY = 'tracedoc.live.v1.'
 const STATUS_FILE = '.tracedoc-mods-status.json'
 const OFF_TOAST = 'TraceDoc is off — run /ai-tracedoc-mods:on to start recording'
+const OTHER_SESSION_TOAST =
+  'Another Claude Code session is recording this project — entries can overwrite each other. Close one.'
+const LIVE_WINDOW_MS = 10 * 60 * 1000
+const BEAT_MS = 60 * 1000
 const GAP_PREFIX = '> ⚠ TraceDoc: '
 const VOLUME_THRESHOLD = 200 * 1024
 const READ_LIMIT = 4 * 1024 * 1024
@@ -156,6 +161,9 @@ let jsonlErrors = []
 // Set when this turn's rows included a command's record, so the turn it
 // belongs to can be told from one whose question went missing.
 let commandTurn = false
+// When this session last wrote its heartbeat, so a long turn beats without a
+// store write per row.
+let lastBeat = 0
 // The ledger file this instance last wrote, so the status file can name the
 // volume that is live. "Is the build I just edited the one running?" is
 // otherwise answerable only from file mtimes and the store's write history.
@@ -625,6 +633,70 @@ async function promptIfOff($, e) {
   }
 }
 
+// Sessions recording one project, kept so a second one can be named instead of
+// silently overwriting the first. This is a warning and not a lock: there is no
+// atomic create to build one from, so it cannot stop the write — only say that
+// it is happening, and the two turns that collide still lose an entry.
+//
+// A session killed outright never runs session.end, so every entry carries a
+// heartbeat and a copy older than LIVE_WINDOW_MS is dropped; a stale entry
+// would name a session that is no longer there.
+function liveKey(cwd) {
+  return LIVE_KEY + String(cwd).toLowerCase()
+}
+
+async function readLive($, key) {
+  const raw = await $.store.get(key)
+  const map = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {}
+  const now = Date.now()
+  const live = {}
+  for (const id of Object.keys(map)) {
+    const at = Number(map[id])
+    if (Number.isFinite(at) && now - at <= LIVE_WINDOW_MS) live[id] = at
+  }
+  return live
+}
+
+// Registers this session — and, at a start, names the others. Throttled, so a
+// turn long enough to outlive the window still beats without a store write on
+// every row.
+async function beat($, e, atStart) {
+  try {
+    if (!sessionCwd || !sessionId) return
+    const now = Date.now()
+    if (!atStart && now - lastBeat < BEAT_MS) return
+    lastBeat = now
+    const key = liveKey(sessionCwd)
+    const live = await readLive($, key)
+    const warned = atStart && e && e.isInteractive !== false && (await recordingEnabled($, sessionCwd))
+    if (warned) {
+      for (const id of Object.keys(live)) {
+        if (id !== String(sessionId)) {
+          $.ui.toast(OTHER_SESSION_TOAST, { timeoutMs: 6000 })
+          break
+        }
+      }
+    }
+    live[String(sessionId)] = now
+    await $.store.set(key, live)
+  } catch (err) {
+    // Registry trouble is not a lost turn; there is nothing to report.
+  }
+}
+
+async function leaveLive($) {
+  try {
+    if (!sessionCwd || !sessionId) return
+    const key = liveKey(sessionCwd)
+    const live = await readLive($, key)
+    delete live[String(sessionId)]
+    if (Object.keys(live).length) await $.store.set(key, live)
+    else await $.store.delete(key)
+  } catch (err) {
+    // Leaving costs nothing if the registry cannot be read.
+  }
+}
+
 async function record($, question, answer) {
   const cwd = sessionCwd || (await $.session.root())
   const id = sessionId || (await $.session.id())
@@ -763,6 +835,7 @@ export function register(on) {
       sessionId = await $.session.id()
       await safeStatus($)
       await promptIfOff($, e)
+      await beat($, e, true)
     } catch (err) {
       noteFailure('session.start', err)
     }
@@ -801,6 +874,7 @@ export function register(on) {
         counters.subagentAppendsSkipped++
         return out
       }
+      await beat($, e, false)
       const door = e && e.door != null ? String(e.door) : '(absent)'
       counters.appendsByDoor[door] = (counters.appendsByDoor[door] || 0) + 1
 
@@ -866,6 +940,7 @@ export function register(on) {
         counters.subagentTurnsSkipped++
         return out
       }
+      await beat($, e, false)
       counters.turns++
       const reason = e && e.reason != null ? String(e.reason) : '(absent)'
       counters.turnReasons[reason] = (counters.turnReasons[reason] || 0) + 1
@@ -911,6 +986,7 @@ export function register(on) {
       // ended — deferring would only lose it.
       const question = await takePending($)
       commandTurn = false
+      await leaveLive($)
       if (question) {
         await serialize(function () {
           return record($, question, '')

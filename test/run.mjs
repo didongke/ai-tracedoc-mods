@@ -608,6 +608,50 @@ async function testRootNotCwd() {
 
 // ---------------------------------------------------------------------------
 
+// Two sessions in one project overwrite each other's entries, silently. This is
+// the warning that names the second one — not a lock: no atomic create exists,
+// so the write still happens and the collision still costs an entry.
+async function testSecondSession() {
+  console.log('\ntest: a second session in the same project')
+  const root = scenario('two')
+  const key = 'tracedoc.live.v1.' + root.cwd.toLowerCase()
+  const $1 = makeDollar(root, root.store)
+  const h1 = (await load('s1')).hooks
+  await h1['session.start']($1, { cwd: root.cwd, isInteractive: true }, async () => undefined)
+  check('a lone session says nothing', root.toasts.length, 0)
+  check('and registers itself', Object.keys(root.store.get(key)).length, 1)
+
+  // The same session again — a hot reload, or claude -c — is not another one.
+  const h2 = (await load('s2')).hooks
+  await h2['session.start']($1, { cwd: root.cwd, isInteractive: true }, async () => undefined)
+  check('the same session is not another', root.toasts.length, 0)
+
+  // Another session, another id, the same project.
+  root.sessionId = 'sess-2'
+  const $2 = makeDollar(root, root.store)
+  const h3 = (await load('s3')).hooks
+  await h3['session.start']($2, { cwd: root.cwd, isInteractive: true }, async () => undefined)
+  check('the second one is told', root.toasts.length, 1)
+  check('and says what it costs', root.toasts[0].text.indexOf('overwrite') > 0, true)
+  check('both are registered', Object.keys(root.store.get(key)).length, 2)
+
+  // Leaving takes it out of the register.
+  await h3['session.end']($2, { reason: 'exit' }, async () => undefined)
+  check('and leaving removes it', Object.keys(root.store.get(key)).length, 1)
+
+  // A session killed outright never ends; its entry expires instead.
+  const stale = scenario('two-stale')
+  const staleKey = 'tracedoc.live.v1.' + stale.cwd.toLowerCase()
+  stale.store.set(staleKey, { 'dead-session': Date.now() - 11 * 60 * 1000 })
+  const $s = makeDollar(stale, stale.store)
+  const hs = (await load('s4')).hooks
+  await hs['session.start']($s, { cwd: stale.cwd, isInteractive: true }, async () => undefined)
+  check('a stale entry is not another session', stale.toasts.length, 0)
+  check('and is dropped from the register', Object.keys(stale.store.get(staleKey)).length, 1)
+}
+
+// ---------------------------------------------------------------------------
+
 await testFirstTurn()
 await testSecondTurn()
 await testMarkerAbsent()
@@ -618,6 +662,7 @@ await testWhichRowsAreQuestions()
 await testVersionCommand()
 await testFirstRunPrompt()
 await testRootNotCwd()
+await testSecondSession()
 
 console.log('\n' + (failures ? failures + ' check(s) FAILED' : 'all checks passed'))
 process.exit(failures ? 1 : 0)

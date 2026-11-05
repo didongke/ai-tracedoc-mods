@@ -1,6 +1,6 @@
 {
   "name": "ai-tracedoc-mods",
-  "version": "0.5.8-mods.1",
+  "version": "0.5.9-mods.1",
   "description": "Records every Claude Code Q&A into a per-project ledger, as a hooks module rather than a binary.",
   "author": {
     "name": "ddk"
