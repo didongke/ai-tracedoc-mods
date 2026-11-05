@@ -6,6 +6,9 @@
 每个问答写两份：人看的 Markdown 账簿，机器读的 JSONL。<br>
 三个平台（Windows、Linux、macOS）使用相同源码，都实际运行和测试过。
 
+> 撞上 `400 … maximum context length` → 退出 → 重开会话 → "读这个项目的 `*-tracedoc*.jsonl`,接着干"<br>
+> → 新会话自己说清做到哪、下一步做什么。
+
 ## 价值
 
 1、**断点续工**  
