@@ -164,6 +164,11 @@ let commandTurn = false
 // When this session last wrote its heartbeat, so a long turn beats without a
 // store write per row.
 let lastBeat = 0
+// Whether this session has a person at the prompt, and whether it has already
+// named another session — both set at session.start, so a row or a turn can
+// warn without reading the event.
+let interactive = true
+let warnedOther = false
 // The ledger file this instance last wrote, so the status file can name the
 // volume that is live. "Is the build I just edited the one running?" is
 // otherwise answerable only from file mtimes and the store's write history.
@@ -657,28 +662,33 @@ async function readLive($, key) {
   return live
 }
 
-// Registers this session — and, at a start, names the others. Throttled, so a
-// turn long enough to outlive the window still beats without a store write on
-// every row.
-async function beat($, e, atStart) {
+// Registers this session — and names any other, so both sides learn. Throttled
+// where it is called from a row, so a busy turn beats once a minute rather than
+// per row; a turn boundary beats every time, which is how the session that was
+// already running hears about the one that started after it.
+async function beat($, throttled) {
   try {
     if (!sessionCwd || !sessionId) return
     const now = Date.now()
-    if (!atStart && now - lastBeat < BEAT_MS) return
+    if (throttled && now - lastBeat < BEAT_MS) return
     lastBeat = now
     const key = liveKey(sessionCwd)
     const live = await readLive($, key)
-    const warned = atStart && e && e.isInteractive !== false && (await recordingEnabled($, sessionCwd))
-    if (warned) {
-      for (const id of Object.keys(live)) {
-        if (id !== String(sessionId)) {
-          $.ui.toast(OTHER_SESSION_TOAST, { timeoutMs: 6000 })
-          break
-        }
-      }
-    }
     live[String(sessionId)] = now
     await $.store.set(key, live)
+    if (warnedOther || !interactive) return
+    if (!(await recordingEnabled($, sessionCwd))) return
+    for (const id of Object.keys(live)) {
+      if (id !== String(sessionId)) {
+        warnedOther = true
+        try {
+          $.ui.toast(OTHER_SESSION_TOAST, { timeoutMs: 6000 })
+        } catch (err) {
+          // No ui to toast into; the session is still told in the register.
+        }
+        return
+      }
+    }
   } catch (err) {
     // Registry trouble is not a lost turn; there is nothing to report.
   }
@@ -833,9 +843,11 @@ export function register(on) {
         sessionCwd = e && e.cwd ? e.cwd : ''
       }
       sessionId = await $.session.id()
+      interactive = !(e && e.isInteractive === false)
+      warnedOther = false
       await safeStatus($)
       await promptIfOff($, e)
-      await beat($, e, true)
+      await beat($, false)
     } catch (err) {
       noteFailure('session.start', err)
     }
@@ -874,7 +886,7 @@ export function register(on) {
         counters.subagentAppendsSkipped++
         return out
       }
-      await beat($, e, false)
+      await beat($, true)
       const door = e && e.door != null ? String(e.door) : '(absent)'
       counters.appendsByDoor[door] = (counters.appendsByDoor[door] || 0) + 1
 
@@ -940,7 +952,7 @@ export function register(on) {
         counters.subagentTurnsSkipped++
         return out
       }
-      await beat($, e, false)
+      await beat($, false)
       counters.turns++
       const reason = e && e.reason != null ? String(e.reason) : '(absent)'
       counters.turnReasons[reason] = (counters.turnReasons[reason] || 0) + 1

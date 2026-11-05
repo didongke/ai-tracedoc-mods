@@ -635,6 +635,13 @@ async function testSecondSession() {
   check('and says what it costs', root.toasts[0].text.indexOf('overwrite') > 0, true)
   check('both are registered', Object.keys(root.store.get(key)).length, 2)
 
+  // The session that was already running hears about it at its next turn
+  // boundary, not only the one that started second — and only once.
+  await h1['turn.complete']($1, { answer: 'x', reason: 'answer' }, async () => undefined)
+  check('the first session learns it too', root.toasts.length, 2)
+  await h1['turn.complete']($1, { answer: 'y', reason: 'answer' }, async () => undefined)
+  check('once is enough', root.toasts.length, 2)
+
   // Leaving takes it out of the register.
   await h3['session.end']($2, { reason: 'exit' }, async () => undefined)
   check('and leaving removes it', Object.keys(root.store.get(key)).length, 1)
