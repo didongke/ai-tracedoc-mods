@@ -8,7 +8,7 @@ It runs as a Claude Code **hooks module**.<br>
 Each Q&A is written twice: a Markdown ledger for people, JSONL for machines.<br>
 One source for Windows, Linux and macOS, run and tested on all three.
 
-![A new session resuming from the ledger](assets/demo.gif)
+![A new session resuming from the ledger](assets/demo-en.gif)
 
 > Hit `400 … maximum context length` → quit → reopen a session → "read this project's `*-tracedoc*.jsonl` and carry on"<br>
 > → the new session says what was done and what is next, by itself.
