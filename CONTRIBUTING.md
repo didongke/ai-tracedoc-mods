@@ -29,13 +29,20 @@ The plugin's status file, `.tracedoc-mods-status.json`, lives in the plugin dire
 
 ## Pull requests
 
-Small, focused PRs are welcome. A test for a bug you found is the most valuable shape. Run the suite before you send:
+Small, focused PRs are welcome. A test for a bug you found is the most valuable shape. **Open an issue before writing anything larger than a typo** — it saves you code I can't take. Run the suite before you send:
 
 ```
 node test/run.mjs hooks/tracedoc.js
 ```
 
 It needs Node and nothing else. If you change the ledger's layout or the JSONL, say so in the PR — those files are the product.
+
+## What I won't merge
+
+- **Recording tool output, thinking or system notices.** The ledger is small enough that a fresh session reads all of it; that property dies the moment it becomes an event stream. See [ROADMAP.md](ROADMAP.md).
+- **Telemetry, analytics, or any network call.**
+- **A change to how the ledger is written that skips the format discussion.** The missing cross-process lock is a known limitation, not an oversight — see ROADMAP.
+- **A behaviour change documented in one language only.** `README.md` and `README.zh-CN.md` change in the same PR; a one-sided change will be sent back.
 
 ## Security
 

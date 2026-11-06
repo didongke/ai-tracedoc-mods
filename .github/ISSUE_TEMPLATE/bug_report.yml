@@ -8,6 +8,8 @@ body:
       value: |
         Before filing: the limits in [CONTRIBUTING](https://github.com/didongke/ai-tracedoc-mods/blob/main/CONTRIBUTING.md#before-you-open-an-issue) explain several "it did nothing" cases. The status file, `.tracedoc-mods-status.json` in the plugin directory, is the first thing to look at — but read it before attaching, since it summarizes rows.
 
+        **Do not paste ledger content that contains secrets.** Trim it, or describe its shape.
+
   - type: input
     id: version
     attributes:
@@ -41,7 +43,7 @@ body:
     id: what
     attributes:
       label: What happened
-      description: What you expected, what happened instead, and the ledger or JSONL lines around it.
+      description: What you expected, what happened instead, and the ledger or JSONL lines around it. If an entry is missing, give the timestamps of the entries immediately before and after the gap.
     validations:
       required: true
 
@@ -57,6 +59,9 @@ body:
     attributes:
       label: Before sending
       options:
+        - label: `.tracedoc-on` exists in the project root
+        - label: Only one Claude Code session was running in this project
+        - label: `/plugin` says `1 mod active · ai-tracedoc-mods`
         - label: I read the limits in CONTRIBUTING
           required: true
         - label: I checked `.tracedoc-mods-status.json` and pasted anything relevant

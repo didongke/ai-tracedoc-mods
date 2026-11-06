@@ -1,0 +1,47 @@
+name: Use case / feedback
+description: Tell me what your project does and whether the ledger helped.
+title: "[case] "
+labels: ["feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This is the most useful kind of issue for me. "It never actually saved me from re-explaining" is a valuable answer — it tells me where to stop.
+
+  - type: textarea
+    id: project
+    attributes:
+      label: What kind of project is it?
+      description: Language, rough size, one developer or a team. No need for the real name or the contents.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: resume
+    attributes:
+      label: Have you ever resumed from a ledger?
+      options:
+        - "Yes — after a context-limit stop"
+        - "Yes — the next day, or after a long gap"
+        - "Yes — on another machine"
+        - "Yes — handed the project to someone else, or to an AI"
+        - "No, I haven't needed to yet"
+        - "No, and I don't think I would"
+    validations:
+      required: true
+
+  - type: textarea
+    id: story
+    attributes:
+      label: What happened
+      description: Roughly how many turns, how big the ledger got, whether the resumed session understood the state.
+    validations:
+      required: false
+
+  - type: textarea
+    id: wants
+    attributes:
+      label: What you wanted it to do and it didn't
+      description: More detail? Less detail? A different layout? Nothing — then say nothing.
+    validations:
+      required: false

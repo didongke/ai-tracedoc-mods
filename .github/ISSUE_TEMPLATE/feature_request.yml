@@ -21,6 +21,17 @@ body:
     attributes:
       label: What you have in mind (optional)
 
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How you work around it today (optional)
+      description: The workaround often says more about the problem than the idea does.
+
+  - type: markdown
+    attributes:
+      value: |
+        Two things are out of scope by design, see [ROADMAP.md](https://github.com/didongke/ai-tracedoc-mods/blob/main/ROADMAP.md): recording tool calls, thinking or system notices, and any telemetry or network call.
+
   - type: checkboxes
     id: fit
     attributes:

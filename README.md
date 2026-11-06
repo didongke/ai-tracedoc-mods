@@ -25,6 +25,8 @@ Claude Code already writes `~/.claude/projects/<path>/<uuid>.jsonl`. That file i
 | Granularity | one file per session | one ledger per project, appended across sessions |
 | Meant for | replay and debugging | resuming, handover, review |
 
+The built-in transcript stays on this machine; the ledger travels with the code. A machine switch, a handover, an AI picking the project up — all of it turns on that difference.
+
 ## Value
 
 1. **Picking up where it stopped.** Work is not finished when it stops — the context ceiling, another machine, handing it to someone else — and carrying on needs no re-explaining.
@@ -110,3 +112,8 @@ the answer and its conclusion
 ## Uninstall
 
 Uninstalling leaves `.tracedoc-on`, `*-tracedoc*.md` and `*-tracedoc*.jsonl` in the project directory — delete them if you do not want them. `.tracedoc-mods-status.json` lives in the plugin directory and goes with the plugin.
+
+## Feedback
+
+- A bug → [open an issue](https://github.com/didongke/ai-tracedoc-mods/issues/new/choose)
+- What your project is, and whether the ledger ever saved you from re-explaining it → [Discussions](https://github.com/didongke/ai-tracedoc-mods/discussions), or a use-case issue. "It never did" is a useful answer too.

@@ -25,6 +25,8 @@ Claude Code 本来就会在 `~/.claude/projects/<路径>/<uuid>.jsonl` 留一份
 | 粒度 | 一会话一个文件 | 一项目一本,跨会话追加 |
 | 用来看什么 | 回放、调试 | 续工、交接、复盘 |
 
+内置的留在本机,账簿跟着代码走 —— 换机器、交接、给 AI 接手,拼的就是这个差别。
+
 ## 价值
 
 1、**断点续工**  
@@ -113,3 +115,8 @@ Claude Code 本来就会在 `~/.claude/projects/<路径>/<uuid>.jsonl` 留一份
 ## 卸载
 
 卸载插件后,项目目录里的 `.tracedoc-on`、`*-tracedoc*.md`、`*-tracedoc*.jsonl` 不会被自动删除,不需要就手动删掉;`.tracedoc-mods-status.json` 在插件目录里,随插件一起消失。
+
+## 反馈
+
+- 有 bug → [开一个 issue](https://github.com/didongke/ai-tracedoc-mods/issues/new/choose)
+- 你的项目是干什么的、账簿有没有真让你少讲一遍 → [Discussions](https://github.com/didongke/ai-tracedoc-mods/discussions),或者开一个"使用场景"issue。"其实一次都没用上"也是有用的回答。
