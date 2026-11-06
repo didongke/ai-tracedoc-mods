@@ -13,6 +13,18 @@
 > 撞上 `400 … maximum context length` → 退出 → 重开会话 → "读这个项目的 `*-tracedoc*.jsonl`,接着干"<br>
 > → 新会话自己说清做到哪、下一步做什么。
 
+### 这不是内置 transcript 吗?
+
+Claude Code 本来就会在 `~/.claude/projects/<路径>/<uuid>.jsonl` 留一份记录。两者不是一回事:
+
+| | 内置 transcript | 这个插件 |
+| --- | --- | --- |
+| 在哪 | `~/.claude/projects/…`,本机 | 项目根目录 |
+| 跟代码走 | 不会 | 会(提交即可) |
+| 记什么 | 全部事件:工具调用、结果、思考 | 只有问答 |
+| 粒度 | 一会话一个文件 | 一项目一本,跨会话追加 |
+| 用来看什么 | 回放、调试 | 续工、交接、复盘 |
+
 ## 价值
 
 1、**断点续工**  
@@ -73,6 +85,8 @@
 ```
 
 超过 200 KiB 时新会话开新卷 `-02.md`,JSONL 同名跟上,旧卷末尾留 `Continued in:` 链接。
+
+> 账簿里是问答原文。想让它跟着代码走,就别把密钥、内网地址写进提示词;不想提交进 git,给项目加两行 `.gitignore`:`*-tracedoc*.md`、`*-tracedoc*.jsonl`。详见 [SECURITY.md](SECURITY.md)。
 
 ### 账簿里的一条
 

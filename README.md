@@ -13,6 +13,18 @@ One source for Windows, Linux and macOS, run and tested on all three.
 > Hit `400 … maximum context length` → quit → reopen a session → "read this project's `*-tracedoc*.jsonl` and carry on"<br>
 > → the new session says what was done and what is next, by itself.
 
+### Isn't this just the built-in transcript?
+
+Claude Code already writes `~/.claude/projects/<path>/<uuid>.jsonl`. That file is not the same thing:
+
+| | Built-in transcript | This plugin |
+| --- | --- | --- |
+| Where it lives | `~/.claude/projects/…`, on this machine | the project root |
+| Travels with the code | no | yes, once committed |
+| What it holds | every event — tool calls, results, thinking | the questions and answers only |
+| Granularity | one file per session | one ledger per project, appended across sessions |
+| Meant for | replay and debugging | resuming, handover, review |
+
 ## Value
 
 1. **Picking up where it stopped.** Work is not finished when it stops — the context ceiling, another machine, handing it to someone else — and carrying on needs no re-explaining.
@@ -70,6 +82,8 @@ A Q&A is written to **two** files in the project root:
 ```
 
 Past 200 KiB, a new session opens a new volume `-02.md`; the JSONL follows under the same name, and the old volume ends with a `Continued in:` link.
+
+> The ledger holds the questions and answers verbatim. If you commit it, keep secrets out of prompts; if you would rather not have it in git, add `*-tracedoc*.md` and `*-tracedoc*.jsonl` to the project's `.gitignore`. See [SECURITY.md](SECURITY.md).
 
 ### One entry in the ledger
 

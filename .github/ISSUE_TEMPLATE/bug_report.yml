@@ -1,0 +1,62 @@
+name: Bug report
+description: Something recorded wrong, did not record, or broke.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: the limits in [CONTRIBUTING](https://github.com/didongke/ai-tracedoc-mods/blob/main/CONTRIBUTING.md#before-you-open-an-issue) explain several "it did nothing" cases. The status file, `.tracedoc-mods-status.json` in the plugin directory, is the first thing to look at — but read it before attaching, since it summarizes rows.
+
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version
+      description: The output of `/ai-tracedoc-mods:version`
+      placeholder: 0.6.0
+    validations:
+      required: true
+
+  - type: input
+    id: claude
+    attributes:
+      label: Claude Code version
+      description: "`claude --version` — needs to be 2.1.287 or later"
+      placeholder: 2.1.300
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you expected, what happened instead, and the ledger or JSONL lines around it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: status
+    attributes:
+      label: Relevant parts of the status file (optional)
+      description: Counters and unreportedFailures from `.tracedoc-mods-status.json`. Read it before pasting.
+      render: json
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: I read the limits in CONTRIBUTING
+          required: true
+        - label: I checked `.tracedoc-mods-status.json` and pasted anything relevant

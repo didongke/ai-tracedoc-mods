@@ -1,0 +1,29 @@
+name: Feature request
+description: An idea for what it should do next.
+title: "[idea] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This plugin does one thing on purpose: it records the questions and answers verbatim and never summarizes. Ideas that keep that shape land best.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would it solve?
+      description: The situation, not the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What you have in mind (optional)
+
+  - type: checkboxes
+    id: fit
+    attributes:
+      label: Shape
+      options:
+        - label: This keeps the record verbatim — no model calls, no summaries

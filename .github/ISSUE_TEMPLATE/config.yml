@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and ideas
+    url: https://github.com/didongke/ai-tracedoc-mods/discussions
+    about: Ask a question, or show how you use it.
+  - name: Report a security problem
+    url: https://github.com/didongke/ai-tracedoc-mods/security/advisories/new
+    about: Privately — never in a public issue.
